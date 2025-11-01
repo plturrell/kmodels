@@ -1,0 +1,39 @@
+# Core dependencies
+torch>=2.0.0
+numpy>=1.23.0
+pandas>=1.5.0
+
+# Machine learning
+pytorch-lightning>=2.0.0
+scikit-learn>=1.3.0
+
+# Graph neural networks
+torch-geometric>=2.3.0
+torch-scatter>=2.1.0
+torch-sparse>=0.6.0
+
+# Hyperparameter tuning
+optuna>=3.4.0
+
+# Utilities
+tqdm>=4.65.0
+joblib>=1.3.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.12.0
+
+# Model interpretability
+shap>=0.42.0
+
+# Kaggle API
+kaggle>=1.5.12
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# Code quality
+black>=22.0.0
+flake8>=4.0.0
+isort>=5.10.0
