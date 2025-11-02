@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config.experiment import (
+    CurriculumConfig,
     ExperimentConfig,
     FeatureConfig,
+    KalmanConfig,
     LossConfig,
     ModelConfig,
     OptimizerConfig,
@@ -137,8 +139,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--loss-mode",
         default="mse",
-        choices=("mse", "sharpe", "sharpe_mse"),
+        choices=("mse", "sharpe", "sharpe_mse", "heteroscedastic"),
         help="Objective to optimize.",
+    )
+    parser.add_argument(
+        "--heteroscedastic-weight",
+        type=float,
+        default=0.5,
+        help="Weight for variance mismatch regularization in heteroscedastic loss (default: 0.5).",
     )
     parser.add_argument(
         "--sharpe-risk-free",
@@ -182,6 +190,56 @@ def build_parser() -> argparse.ArgumentParser:
         help="Use shuffled validation split instead of chronological holdout.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run smoke test with minimal settings (first 200 rows, 1 epoch, minimal features).",
+    )
+    parser.add_argument(
+        "--use-kalman-smoothing",
+        action="store_true",
+        help="Apply Kalman smoothing to denoise target values.",
+    )
+    parser.add_argument(
+        "--kalman-noise-variance",
+        type=float,
+        default=0.01,
+        help="Process noise variance for Kalman smoother (default: 0.01).",
+    )
+    parser.add_argument(
+        "--kalman-observation-noise",
+        type=float,
+        help="Observation noise variance (default: learned from data).",
+    )
+    parser.add_argument(
+        "--use-curriculum",
+        action="store_true",
+        help="Enable curriculum learning with uncertainty gating.",
+    )
+    parser.add_argument(
+        "--curriculum-start-ratio",
+        type=float,
+        default=0.1,
+        help="Start with easiest fraction of samples (default: 0.1).",
+    )
+    parser.add_argument(
+        "--curriculum-difficulty-metric",
+        choices=("volatility", "ensemble_disagreement", "prediction_confidence"),
+        default="volatility",
+        help="Metric for ranking sample difficulty (default: volatility).",
+    )
+    parser.add_argument(
+        "--curriculum-min-epoch",
+        type=int,
+        default=0,
+        help="Epoch to start introducing harder samples (default: 0).",
+    )
+    parser.add_argument(
+        "--curriculum-max-epoch",
+        type=int,
+        default=10,
+        help="Epoch to reach full difficulty range (default: 10).",
+    )
     parser.add_argument("--output-dir", type=Path, help="Override the default output directory.")
     parser.add_argument("--run-name", help="Optional name for the run directory.")
     return parser
@@ -197,9 +255,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.time_series_holdout:
         time_series_holdout = True
 
+    if args.smoke:
+        # Smoke test: minimal settings
+        epochs = 1
+        batch_size = 64
+        hidden_dims = [64]
+        lag_steps = [1]
+        rolling_windows = [5]
+        rolling_stats = ["mean"]
+        max_nan_ratio = 0.95
+        dropout = 0.1
+    else:
+        epochs = args.epochs
+        batch_size = args.batch_size
+        hidden_dims = args.hidden_dims if args.hidden_dims else [512, 256, 128]
+        lag_steps = args.lag_steps if args.lag_steps else [1, 5, 21]
+        rolling_windows = args.rolling_windows if args.rolling_windows else [5, 21]
+        rolling_stats = args.rolling_stats if args.rolling_stats else ["mean", "std"]
+        max_nan_ratio = args.max_nan_ratio
+        dropout = args.dropout
+
     trainer_cfg = TrainerConfig(
-        epochs=args.epochs,
-        batch_size=args.batch_size,
+        epochs=epochs,
+        batch_size=batch_size,
         num_workers=4,
         val_fraction=args.val_fraction,
         time_series_holdout=time_series_holdout,
@@ -207,17 +285,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     feature_cfg = FeatureConfig(
         drop_columns=args.drop_column,
-        max_nan_ratio=args.max_nan_ratio,
+        max_nan_ratio=max_nan_ratio,
         drop_constant=not args.no_drop_constant,
-        lag_steps=args.lag_steps if args.lag_steps else [1, 5, 21],
-        rolling_windows=args.rolling_windows if args.rolling_windows else [5, 21],
-        rolling_stats=args.rolling_stats if args.rolling_stats else ["mean", "std"],
+        lag_steps=lag_steps,
+        rolling_windows=rolling_windows,
+        rolling_stats=rolling_stats,
     )
 
     model_cfg = ModelConfig(
         model_type=args.model,
-        hidden_dims=args.hidden_dims if args.hidden_dims else [512, 256, 128],
-        dropout=args.dropout,
+        hidden_dims=hidden_dims,
+        dropout=dropout,
         activation=args.activation,
         batch_norm=not args.no_batch_norm,
         perceiver_latent_dim=args.perceiver_latent_dim,
@@ -238,6 +316,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         sharpe_risk_free=args.sharpe_risk_free,
         sharpe_lambda=args.sharpe_lambda,
         mse_weight=args.loss_mse_weight,
+        heteroscedastic_weight=args.heteroscedastic_weight,
+    )
+
+    kalman_cfg = KalmanConfig(
+        enabled=args.use_kalman_smoothing,
+        process_noise=args.kalman_noise_variance,
+        observation_noise=args.kalman_observation_noise,
+    )
+
+    curriculum_cfg = CurriculumConfig(
+        enabled=args.use_curriculum,
+        start_ratio=args.curriculum_start_ratio,
+        difficulty_metric=args.curriculum_difficulty_metric,
+        min_difficulty_epoch=args.curriculum_min_epoch,
+        max_difficulty_epoch=args.curriculum_max_epoch,
     )
 
     exp_cfg = ExperimentConfig(
@@ -248,11 +341,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         id_column=args.id_column,
         submission_column=args.submission_column,
         seed=args.seed,
+        max_samples=200 if args.smoke else None,
         model=model_cfg,
         optimizer=optimizer_cfg,
         trainer=trainer_cfg,
         features=feature_cfg,
         loss=loss_cfg,
+        kalman=kalman_cfg,
+        curriculum=curriculum_cfg,
     )
 
     if args.output_dir:

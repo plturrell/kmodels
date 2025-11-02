@@ -165,6 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Persist the trained model as model.joblib inside the run directory.",
     )
     parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run smoke test with minimal settings (first 200 rows, 1 epoch, minimal features).",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase logging verbosity."
     )
     return parser
@@ -211,24 +216,37 @@ def main(argv: list[str] | None = None) -> int:
     train_df = pd.read_csv(args.train_csv)
     test_df = pd.read_csv(args.test_csv) if args.test_csv else None
 
+    if args.smoke:
+        LOGGER.info("Smoke test mode: limiting to first 200 rows")
+        train_df = train_df.head(200)
+        if test_df is not None:
+            test_df = test_df.head(50)
+
     if args.target_column not in train_df.columns:
         raise ValueError(f"Target column '{args.target_column}' not found in train CSV.")
     if args.id_column not in train_df.columns:
         LOGGER.warning("ID column '%s' missing in train CSV; continuing without it.", args.id_column)
 
     default_cfg = FeatureBuilderConfig()
-    lag_steps = tuple(args.lag_steps) if args.lag_steps else default_cfg.lag_steps
-    max_nan_ratio = args.max_nan_ratio
-    if max_nan_ratio is not None and max_nan_ratio >= 1:
-        max_nan_ratio = None
-    rolling_windows: tuple[int, ...]
-    if args.no_rolling_features:
-        rolling_windows = ()
+    if args.smoke:
+        # Smoke test: minimal feature engineering
+        lag_steps = (1,)
+        rolling_windows = (5,)
+        rolling_stats = ("mean",)
+        max_nan_ratio = 0.95
     else:
-        rolling_windows = (
-            tuple(args.rolling_windows) if args.rolling_windows else default_cfg.rolling_windows
-        )
-    rolling_stats = tuple(args.rolling_stats) if args.rolling_stats else tuple(default_cfg.rolling_stats)
+        lag_steps = tuple(args.lag_steps) if args.lag_steps else default_cfg.lag_steps
+        max_nan_ratio = args.max_nan_ratio
+        if max_nan_ratio is not None and max_nan_ratio >= 1:
+            max_nan_ratio = None
+        rolling_windows: tuple[int, ...]
+        if args.no_rolling_features:
+            rolling_windows = ()
+        else:
+            rolling_windows = (
+                tuple(args.rolling_windows) if args.rolling_windows else default_cfg.rolling_windows
+            )
+        rolling_stats = tuple(args.rolling_stats) if args.rolling_stats else tuple(default_cfg.rolling_stats)
 
     feature_config = FeatureBuilderConfig(
         drop_columns=[args.target_column, args.id_column, *args.drop_column],
@@ -253,13 +271,23 @@ def main(argv: list[str] | None = None) -> int:
 
     submission_column = args.submission_column or args.target_column
 
+    if args.smoke:
+        # Smoke test: minimal model settings
+        cv_splits = 2
+        gbm_max_iter = 10
+        gbm_max_depth = 3
+    else:
+        cv_splits = args.cv_splits
+        gbm_max_iter = args.gbm_max_iter
+        gbm_max_depth = args.gbm_max_depth
+
     baseline_config = BaselineConfig(
         task=task,
-        n_splits=args.cv_splits,
+        n_splits=cv_splits,
         time_series_cv=not args.no_time_series_cv,
         random_state=args.random_state,
-        max_depth=args.gbm_max_depth,
-        max_iter=args.gbm_max_iter,
+        max_depth=gbm_max_depth,
+        max_iter=gbm_max_iter,
         learning_rate=args.gbm_learning_rate,
         min_samples_leaf=args.gbm_min_samples_leaf,
     )

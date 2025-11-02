@@ -15,9 +15,12 @@ token stored at `~/.kaggle/kaggle.json` before the script can authenticate.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 import sys
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -53,13 +56,90 @@ def _extract_zip(archive: Path, extract_dir: Path) -> None:
         zf.extractall(extract_dir)
 
 
+def _compute_file_hash(file_path: Path) -> str:
+    """Compute SHA256 hash of a file."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def _generate_manifest(
+    download_dir: Path,
+    competition: str,
+    output_path: Optional[Path] = None,
+) -> dict:
+    """Generate a dataset manifest with file hashes and metadata.
+    
+    Args:
+        download_dir: Directory containing downloaded/extracted files
+        competition: Competition slug
+        output_path: Optional path to save manifest JSON. If None, uses outputs/dataset_manifest.json
+        
+    Returns:
+        Dictionary containing manifest data
+    """
+    manifest = {
+        "competition": competition,
+        "download_timestamp": datetime.utcnow().isoformat(),
+        "files": [],
+    }
+    
+    # Collect all files (excluding hidden files and the manifest itself)
+    files = []
+    for item in download_dir.rglob("*"):
+        if item.is_file() and not item.name.startswith("."):
+            # Skip manifest files
+            if item.name == "dataset_manifest.json":
+                continue
+            files.append(item)
+    
+    for file_path in sorted(files):
+        try:
+            file_size = file_path.stat().st_size
+            file_hash = _compute_file_hash(file_path)
+            relative_path = file_path.relative_to(download_dir)
+            manifest["files"].append({
+                "path": str(relative_path),
+                "size_bytes": file_size,
+                "sha256": file_hash,
+            })
+        except (OSError, IOError) as exc:
+            LOGGER.warning("Failed to process file %s: %s", file_path, exc)
+    
+    manifest["file_count"] = len(manifest["files"])
+    
+    if output_path is None:
+        # Default to outputs/dataset_manifest.json relative to download_dir
+        outputs_dir = download_dir.parent.parent / "outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        output_path = outputs_dir / "dataset_manifest.json"
+    
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    
+    LOGGER.info("Generated dataset manifest with %d files at %s", manifest["file_count"], output_path)
+    return manifest
+
+
 def download_competition(
     competition: str,
     download_dir: Path,
     files: Optional[Iterable[str]] = None,
     extract: bool = False,
+    generate_manifest: bool = True,
 ) -> None:
-    """Download competition files to ``download_dir``."""
+    """Download competition files to ``download_dir``.
+    
+    Args:
+        competition: Competition slug
+        download_dir: Directory to save downloads
+        files: Optional list of specific files to download
+        extract: Whether to extract zip archives
+        generate_manifest: Whether to generate dataset manifest with checksums
+    """
     api = _authenticate()
     download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,6 +162,9 @@ def download_competition(
         for archive in archives:
             target_dir = download_dir / archive.stem
             _extract_zip(archive, target_dir)
+
+    if generate_manifest:
+        _generate_manifest(download_dir, competition)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,6 +197,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Extract any downloaded zip archives after download completes.",
     )
     parser.add_argument(
+        "--no-manifest",
+        action="store_true",
+        help="Skip generating dataset manifest with checksums.",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="count",
@@ -140,6 +228,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             download_dir=args.download_dir,
             files=args.files,
             extract=args.extract,
+            generate_manifest=not args.no_manifest,
         )
     except Exception as exc:  # pragma: no cover
         LOGGER.error("%s", exc)

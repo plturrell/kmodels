@@ -63,6 +63,25 @@ class FeatureConfig:
 
 
 @dataclass
+class KalmanConfig:
+    enabled: bool = False
+    process_noise: float = 0.01
+    observation_noise: Optional[float] = None
+    initial_state: Optional[float] = None
+    initial_uncertainty: float = 1.0
+
+
+@dataclass
+class CurriculumConfig:
+    enabled: bool = False
+    start_ratio: float = 0.1
+    difficulty_metric: str = "volatility"  # "volatility", "ensemble_disagreement", "prediction_confidence"
+    adaptive_dropout: bool = False
+    min_difficulty_epoch: int = 0
+    max_difficulty_epoch: int = 10
+
+
+@dataclass
 class ExperimentConfig:
     train_csv: Path
     output_dir: Path = Path("competitions/hull_tactical_market_prediction/outputs/tabular_nn")
@@ -74,12 +93,15 @@ class ExperimentConfig:
     submission_column: str = "prediction"
 
     seed: int = 42
+    max_samples: Optional[int] = None  # Limit dataset size for smoke tests
 
     model: ModelConfig = field(default_factory=ModelConfig)
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     trainer: TrainerConfig = field(default_factory=TrainerConfig)
     features: FeatureConfig = field(default_factory=FeatureConfig)
     loss: LossConfig = field(default_factory=LossConfig)
+    kalman: KalmanConfig = field(default_factory=KalmanConfig)
+    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
 
     def to_dict(self) -> Dict[str, object]:
         data = asdict(self)

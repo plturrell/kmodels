@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -12,6 +13,15 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ..config.experiment import ExperimentConfig, TrainerConfig
 from ..features.build_features import FeatureBuilderConfig, align_features, build_feature_frame
+from ..features.kalman_smoother import KalmanSmootherConfig, smooth_targets
+from .curriculum import (
+    CurriculumConfig,
+    rank_samples_by_difficulty,
+    create_curriculum_sampler_weights,
+)
+from torch.utils.data import WeightedRandomSampler
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -23,6 +33,7 @@ class PreparedFeatures:
     test_ids: Optional[pd.Series]
     feature_means: np.ndarray
     feature_stds: np.ndarray
+    target_uncertainties: Optional[np.ndarray] = None  # Kalman smoothing uncertainties
 
 
 def _standardise_frame(frame: pd.DataFrame) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
@@ -46,7 +57,14 @@ def _apply_standardisation(frame: pd.DataFrame, means: np.ndarray, stds: np.ndar
 
 def prepare_features(config: ExperimentConfig) -> PreparedFeatures:
     train_df = pd.read_csv(config.train_csv)
+    if config.max_samples is not None and len(train_df) > config.max_samples:
+        train_df = train_df.head(config.max_samples)
+    
     test_df = pd.read_csv(config.test_csv) if config.test_csv else None
+    if test_df is not None and config.max_samples is not None:
+        test_limit = max(1, config.max_samples // 4)  # Limit test to ~25% of train limit
+        if len(test_df) > test_limit:
+            test_df = test_df.head(test_limit)
 
     feature_cfg = FeatureBuilderConfig(
         drop_columns=[config.target_column, config.id_column, *config.features.drop_columns],
@@ -70,14 +88,32 @@ def prepare_features(config: ExperimentConfig) -> PreparedFeatures:
         test_norm = None
 
     target = train_df[config.target_column].astype(np.float32)
+    uncertainties: Optional[np.ndarray] = None
+    
+    # Apply Kalman smoothing if enabled
+    if config.kalman.enabled:
+        kalman_cfg = KalmanSmootherConfig(
+            process_noise=config.kalman.process_noise,
+            observation_noise=config.kalman.observation_noise,
+            initial_state=config.kalman.initial_state,
+            initial_uncertainty=config.kalman.initial_uncertainty,
+        )
+        smoothed_targets, uncertainties = smooth_targets(target, kalman_cfg)
+        target = pd.Series(smoothed_targets, index=target.index).astype(np.float32)
+        uncertainties = uncertainties.astype(np.float32)
+        LOGGER.info("Applied Kalman smoothing with uncertainties (mean: %.4f, std: %.4f)", 
+                   np.nanmean(uncertainties), np.nanstd(uncertainties))
+    
     train_ids = train_df[config.id_column]
     test_ids = test_df[config.id_column] if test_df is not None else None
-    return PreparedFeatures(train_norm, target, train_ids, test_norm, test_ids, means, stds)
+    return PreparedFeatures(train_norm, target, train_ids, test_norm, test_ids, means, stds, uncertainties)
 
 
 def create_dataloaders(
     prepared: PreparedFeatures,
     trainer_cfg: TrainerConfig,
+    curriculum_cfg: Optional[CurriculumConfig] = None,
+    epoch: int = 0,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader], np.ndarray]:
     features_tensor = torch.from_numpy(prepared.train_features.to_numpy(dtype=np.float32))
     target_tensor = torch.from_numpy(prepared.train_target.to_numpy(dtype=np.float32)).unsqueeze(-1)
@@ -91,6 +127,7 @@ def create_dataloaders(
     if trainer_cfg.time_series_holdout:
         train_idx = slice(0, train_size)
         val_idx = slice(train_size, num_samples)
+        train_indices_array = np.arange(0, train_size)
         train_features = features_tensor[train_idx]
         train_targets = target_tensor[train_idx]
         val_features = features_tensor[val_idx]
@@ -99,11 +136,40 @@ def create_dataloaders(
         permutation = torch.randperm(num_samples)
         train_indices = permutation[:train_size]
         val_indices = permutation[train_size:]
+        train_indices_array = train_indices.detach().cpu().numpy()
         train_features = features_tensor[train_indices]
         train_targets = target_tensor[train_indices]
         val_features = features_tensor[val_indices]
         val_targets = target_tensor[val_indices]
 
+    # Curriculum learning: rank samples by difficulty
+    sampler: Optional[WeightedRandomSampler] = None
+    shuffle = not trainer_cfg.time_series_holdout
+    
+    if curriculum_cfg is not None and curriculum_cfg.enabled:
+        # Compute difficulty ranks for training samples
+        if trainer_cfg.time_series_holdout:
+            train_features_df = prepared.train_features.iloc[:train_size]
+        else:
+            train_features_df = prepared.train_features.iloc[train_indices_array]
+        
+        difficulty_ranks = rank_samples_by_difficulty(
+            train_features_df,
+            difficulty_metric=curriculum_cfg.difficulty_metric,
+        )
+        
+        # Create sampling weights based on current epoch
+        weights = create_curriculum_sampler_weights(difficulty_ranks, epoch, curriculum_cfg)
+        weights_tensor = torch.from_numpy(weights.astype(np.float32))
+        
+        # Create weighted sampler (only for training set)
+        sampler = WeightedRandomSampler(
+            weights=weights_tensor,
+            num_samples=len(weights),
+            replacement=True,
+        )
+        shuffle = False  # Sampler handles shuffling
+    
     train_dataset = TensorDataset(train_features, train_targets)
     val_dataset = TensorDataset(val_features, val_targets)
 
@@ -124,7 +190,8 @@ def create_dataloaders(
     train_loader = DataLoader(
         train_dataset,
         batch_size=trainer_cfg.batch_size,
-        shuffle=not trainer_cfg.time_series_holdout,
+        shuffle=shuffle,
+        sampler=sampler,
         num_workers=trainer_cfg.num_workers,
         pin_memory=True,
     )

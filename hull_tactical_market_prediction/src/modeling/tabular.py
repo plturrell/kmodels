@@ -24,7 +24,10 @@ def _resolve_activation(name: str) -> nn.Module:
 
 
 class TabularRegressor(nn.Module):
-    """Simple feed-forward network with optional batch norm and dropout."""
+    """Simple feed-forward network with optional batch norm and dropout.
+    
+    Supports heteroscedastic regression by outputting both mean and variance predictions.
+    """
 
     def __init__(
         self,
@@ -34,8 +37,10 @@ class TabularRegressor(nn.Module):
         activation: str = "gelu",
         *,
         batch_norm: bool = True,
+        output_variance: bool = False,
     ) -> None:
         super().__init__()
+        self.output_variance = output_variance
         layers: list[nn.Module] = []
         current_dim = input_dim
         for hidden_dim in hidden_dims:
@@ -46,8 +51,22 @@ class TabularRegressor(nn.Module):
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
             current_dim = hidden_dim
-        layers.append(nn.Linear(current_dim, 1))
-        self.network = nn.Sequential(*layers)
+        
+        self.backbone = nn.Sequential(*layers)
+        self.mean_head = nn.Linear(current_dim, 1)
+        if output_variance:
+            self.variance_head = nn.Sequential(
+                nn.Linear(current_dim, current_dim // 2),
+                _resolve_activation(activation),
+                nn.Linear(current_dim // 2, 1),
+                nn.Softplus(),  # Ensure variance is positive
+            )
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        return self.network(features).squeeze(-1)
+    def forward(self, features: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        hidden = self.backbone(features)
+        mean = self.mean_head(hidden).squeeze(-1)
+        
+        if self.output_variance:
+            variance = self.variance_head(hidden).squeeze(-1)
+            return mean, variance
+        return mean
