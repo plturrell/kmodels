@@ -1,0 +1,23 @@
+# .brev/launchable.yaml
+
+# Define the base configuration for the launchable environment
+launchable:
+  name: "competitions-gpu-template"
+  description: "A reproducible GPU environment for Kaggle competitions."
+
+  # Define the compute resources
+  compute:
+    gpu: "NVIDIA RTX6000Ada"
+    cpus: 8
+    memory: "64GiB"
+    storage: "500GiB"
+
+  # Define the environment using the Dockerfile
+  environment:
+    type: "docker"
+    dockerfile: "../Dockerfile"
+
+  # Define network settings (optional)
+  # network:
+  #   ports:
+  #     - "8888:8888" # Example for Jupyter notebooks
