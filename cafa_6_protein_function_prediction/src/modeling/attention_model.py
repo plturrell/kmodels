@@ -66,8 +66,8 @@ class MultiHeadAttention(nn.Module):
         
         # Return mean over sequence dimension
         out = out.mean(dim=1)  # (batch_size, embed_dim)
-        attn_weights = attn.mean(dim=1).squeeze()  # (batch_size, seq_len, seq_len) or (seq_len, seq_len)
-        
+        attn_weights = attn.mean(dim=1)  # (batch_size, seq_len, seq_len)
+
         return out, attn_weights
 
 
@@ -130,4 +130,3 @@ __all__ = [
     "MultiHeadAttention",
     "AttentionProteinPredictor",
 ]
-

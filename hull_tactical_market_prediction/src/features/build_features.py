@@ -122,6 +122,22 @@ def build_feature_frame(
 
     feature_frame = pd.concat(features, axis=1)
     feature_frame = feature_frame.replace([np.inf, -np.inf], np.nan)
+    all_nan_cols = feature_frame.columns[feature_frame.isna().all()].tolist()
+    if all_nan_cols:
+        feature_frame = feature_frame.drop(columns=all_nan_cols)
+        LOGGER.debug("Dropped %d all-NaN engineered features", len(all_nan_cols))
+
+    if not feature_frame.empty:
+        early_window = max(1, min(len(feature_frame), int(len(feature_frame) * 0.1)))
+        early_nan_mask = feature_frame.iloc[:early_window].notna().any(axis=0)
+        early_missing_cols = feature_frame.columns[~early_nan_mask].tolist()
+        if early_missing_cols:
+            feature_frame = feature_frame.drop(columns=early_missing_cols)
+            LOGGER.debug(
+                "Dropped %d features lacking observations in the first %.0f%% of rows",
+                len(early_missing_cols),
+                0.1 * 100,
+            )
     return feature_frame
 
 
@@ -135,8 +151,5 @@ def align_features(
     train_features = build_feature_frame(train_df, cfg)
     test_features = build_feature_frame(test_df, cfg)
 
-    missing_cols = train_features.columns.difference(test_features.columns)
-    for col in missing_cols:
-        test_features[col] = np.nan
-    test_features = test_features[train_features.columns]
+    test_features = test_features.reindex(columns=train_features.columns, fill_value=np.nan)
     return train_features, test_features

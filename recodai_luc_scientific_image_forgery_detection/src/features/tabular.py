@@ -11,6 +11,11 @@ from typing import Iterable, List, Optional
 import numpy as np
 from PIL import Image
 
+from .forensic_features import extract_forensic_features
+from .frequency_analysis import extract_frequency_features
+from .physics_based import extract_physics_features
+from .statistical_anomalies import extract_statistical_features
+
 _BASE_DIR = Path(__file__).resolve().parents[2]
 
 DATA_ROOT = _BASE_DIR / "data" / "raw" / "recodai-luc-scientific-image-forgery-detection"
@@ -42,6 +47,41 @@ class FeatureRow:
     intensity_skew: float
     edge_density: float
     mask_coverage: float
+    dct_mean_low: float
+    dct_mean_high: float
+    dct_energy_ratio: float
+    dct_high_std: float
+    ela_mean: float
+    ela_std: float
+    ela_max: float
+    jpeg_grid_strength: float
+    double_compression_score: float
+    benford_deviation: float
+    high_freq_noise: float
+    mid_freq_noise: float
+    cfa_periodicity: float
+    cfa_horizontal_strength: float
+    cfa_vertical_strength: float
+    prnu_energy: float
+    prnu_correlation: float
+    lbp_uniformity: float
+    lbp_entropy: float
+    illumination_consistency: float
+    illumination_direction_variance: float
+    illumination_angle_variance: float
+    illumination_color_temperature: float
+    shadow_alignment_score: float
+    vanishing_point_dispersion: float
+    scale_consistency: float
+    radial_distortion: float
+    chromatic_aberration: float
+    focus_measure: float
+    noise_level_variance: float
+    sensor_pattern_deviation: float
+    compression_inconsistency: float
+    resampling_detected: float
+    histogram_kl_divergence: float
+    color_channel_ks: float
 
 
 def _safe_ratio(a: float, b: float) -> float:
@@ -117,6 +157,11 @@ def extract_features(
             intensity_std = float(intensity.std())
             intensity_skew = _calc_skew(intensity.flatten())
             edge_density = _sobel_edge_density(arr)
+            freq_feats = extract_frequency_features(image_path)
+            forensic_feats = extract_forensic_features(image_path)
+            physics_feats = extract_physics_features(image_path)
+            stats_feats = extract_statistical_features(image_path)
+
             feature = FeatureRow(
                 case_id=image_path.stem,
                 label=label_idx,
@@ -140,6 +185,41 @@ def extract_features(
                 intensity_skew=intensity_skew,
                 edge_density=edge_density,
                 mask_coverage=_mask_coverage(mask_dir, image_path.stem),
+                dct_mean_low=freq_feats.dct_mean_low,
+                dct_mean_high=freq_feats.dct_mean_high,
+                dct_energy_ratio=freq_feats.dct_energy_ratio,
+                dct_high_std=freq_feats.dct_high_std,
+                ela_mean=freq_feats.ela_mean,
+                ela_std=freq_feats.ela_std,
+                ela_max=freq_feats.ela_max,
+                jpeg_grid_strength=freq_feats.jpeg_grid_strength,
+                double_compression_score=freq_feats.double_compression_score,
+                benford_deviation=freq_feats.benford_deviation,
+                high_freq_noise=freq_feats.high_freq_noise,
+                mid_freq_noise=freq_feats.mid_freq_noise,
+                cfa_periodicity=forensic_feats.cfa_periodicity,
+                cfa_horizontal_strength=forensic_feats.cfa_horizontal_strength,
+                cfa_vertical_strength=forensic_feats.cfa_vertical_strength,
+                prnu_energy=forensic_feats.prnu_energy,
+                prnu_correlation=forensic_feats.prnu_correlation,
+                lbp_uniformity=forensic_feats.lbp_uniformity,
+                lbp_entropy=forensic_feats.lbp_entropy,
+                illumination_consistency=forensic_feats.illumination_consistency,
+                illumination_direction_variance=forensic_feats.illumination_direction_variance,
+                illumination_angle_variance=physics_feats.illumination_angle_variance,
+                illumination_color_temperature=physics_feats.illumination_color_temperature,
+                shadow_alignment_score=physics_feats.shadow_alignment_score,
+                vanishing_point_dispersion=physics_feats.vanishing_point_dispersion,
+                scale_consistency=physics_feats.scale_consistency,
+                radial_distortion=physics_feats.radial_distortion,
+                chromatic_aberration=physics_feats.chromatic_aberration,
+                focus_measure=physics_feats.focus_measure,
+                noise_level_variance=stats_feats.noise_level_variance,
+                sensor_pattern_deviation=stats_feats.sensor_pattern_deviation,
+                compression_inconsistency=stats_feats.compression_inconsistency,
+                resampling_detected=stats_feats.resampling_detected,
+                histogram_kl_divergence=stats_feats.histogram_kl_divergence,
+                color_channel_ks=stats_feats.color_channel_ks,
             )
             features.append(feature)
     return features

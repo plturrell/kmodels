@@ -86,6 +86,16 @@ config = TCNConfig(input_dim=24, num_classes=7, num_channels=[64, 128, 256])
 model = TCNSequenceClassifier(config)
 ```
 
+## GPU with Brev (optional)
+
+Launch the project wrapper `./brev_gpu.sh` when you need to burst onto a Brev GPU.
+
+- `./brev_gpu.sh create` (one-time) provisions a GPU workspace dedicated to this project.
+- `./brev_gpu.sh sync-up` uploads the project tree before running experiments.
+- `./brev_gpu.sh shell` opens the GPU environment for installs and training.
+
+Full workflow details live in `../docs/brev_gpu_workflow.md`.
+
 ## Other Utilities
 - Track leaderboard progress: `python -m competitions.mabe_mouse_behavior_detection.src.utils.leaderboard --top 10`
 - **NEW**: Advanced architectures in `src/modeling/advanced.py` (Transformer, LSTM, TCN)

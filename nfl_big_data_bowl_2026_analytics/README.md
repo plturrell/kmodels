@@ -64,6 +64,16 @@ metrics = compute_all_metrics(predictions, targets)
 # Returns: {'fde': 1.23, 'ade': 0.98, 'miss_rate_2yd': 0.15, ...}
 ```
 
+## GPU with Brev (optional)
+
+Call `./brev_gpu.sh` when you want to burst onto a Brev GPU for this project.
+
+- `./brev_gpu.sh create` (first run) provisions the dedicated instance.
+- `./brev_gpu.sh sync-up` mirrors the project directory to that workspace.
+- `./brev_gpu.sh shell` opens an interactive shell on the GPU machine.
+
+Additional workflow guidance lives in `../docs/brev_gpu_workflow.md`.
+
 ## Repository Layout
 
 - `competitions/nfl_big_data_bowl_2026_analytics/data/` – raw competition bundle (gitignored by default).

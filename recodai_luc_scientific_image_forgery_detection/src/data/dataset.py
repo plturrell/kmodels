@@ -125,7 +125,7 @@ class ForgeryDataset(Dataset):
         mask = self._load_mask(sample, spatial_shape)
         label = torch.tensor(sample.label, dtype=torch.long)
 
-        batch = {"image": image, "mask": mask, "label": label}
+        batch = {"image": image, "mask": mask, "label": label, "case_id": sample.image_path.stem}
         if self.transforms is not None:
             batch = self.transforms(batch)
             image = batch["image"]
@@ -145,7 +145,12 @@ class ForgeryDataset(Dataset):
                         size=target_shape,
                         mode="nearest",
                     ).squeeze(0)
-            batch = {"image": image, "mask": mask, "label": batch.get("label", label)}
+            batch = {
+                "image": image,
+                "mask": mask,
+                "label": batch.get("label", label),
+                "case_id": sample.image_path.stem,
+            }
         return batch
 
 

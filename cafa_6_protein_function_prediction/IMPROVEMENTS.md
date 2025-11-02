@@ -1,6 +1,6 @@
 # CAFA 6 Protein Function Prediction - Improvements Summary
 
-This document summarizes all 14 improvements made to the competition workspace.
+This document summarizes all 17 improvements made to the competition workspace.
 
 ## ✅ Completed Improvements
 
@@ -136,6 +136,7 @@ print(f"Mean F1: {results['mean_f1']:.3f} ± {results['std_f1']:.3f}")
 - **Weighted averaging**: Combine models with learned weights
 - **Stacking**: Meta-learner on top of base models
 - **Voting**: Majority voting for predictions
+- **CLI blender**: `ensemble_cli` for averaging or optimising weights with CAFA metrics
 
 **Usage:**
 ```python
@@ -160,6 +161,7 @@ predictions = ensemble.predict_proba(X_test)
 - **Multi-head attention**: Capture complex patterns
 - **Positional encoding**: Sequence position information
 - **Residual connections**: Better gradient flow
+- **Lightning integration**: Selectable via `training.baseline` CLI / YAML configs
 
 **Usage:**
 ```python
@@ -202,11 +204,12 @@ augmented = augment_sequence(sequence, mutation_rate=0.05)
 
 All implemented with comprehensive features:
 
-- **Unit Tests**: pytest suite with 90%+ coverage
+- **Unit Tests**: pytest coverage for attention, ensemble, active learning, evaluation helpers
 - **CI/CD**: GitHub Actions workflow
-- **Interpretability**: Attention visualization, SHAP values
-- **Active Learning**: Uncertainty-based sample selection
-- **Memory Efficiency**: Batch processing, memory-mapped arrays
+- **Interpretability**: `interpretability_cli` for attention heatmaps & permutation importance
+- **Active Learning**: CLI for uncertainty / margin / entropy / QBC selection
+- **Evaluation**: `evaluate_runs` aggregates run + ensemble metrics
+- **Memory Efficiency**: Batch processing and embedding caching improvements
 
 ---
 
@@ -266,4 +269,3 @@ All implemented with comprehensive features:
 ---
 
 All improvements are complete and ready for competition use!
-

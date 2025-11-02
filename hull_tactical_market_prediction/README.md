@@ -128,6 +128,16 @@ python -m competitions.hull_tactical_market_prediction.src.utils.convert_submiss
 
 `--compression` controls the parquet codec (`snappy` by default, pass `none` to disable compression).
 
+## GPU with Brev (optional)
+
+Leverage the optional Brev wrapper (`./brev_gpu.sh`) when you need GPU time for experiments tied to this project.
+
+- `./brev_gpu.sh create` (first run) provisions the dedicated GPU instance.
+- `./brev_gpu.sh sync-up` mirrors the project directory to that workspace.
+- `./brev_gpu.sh shell` opens a remote shell for GPU-bound training or evaluation.
+
+See `../docs/brev_gpu_workflow.md` for additional details and override options.
+
 ## 7. Next steps
 
 - Integrate richer domain signals (spreads, regime flags, macro rollups) to complement the default lag/rolling set.

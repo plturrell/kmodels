@@ -10,9 +10,13 @@ from typing import Optional, Sequence
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from torch import nn
 
 from .config.training import AugmentationConfig, ExperimentConfig, OptimizerConfig
 from .modeling.baseline import VisionBaselineConfig, build_vision_baseline
+from .modeling.dual_stream import DualStreamConfig, DualStreamForgeryModel
+from .modeling.pretrained import PretrainedModelConfig, build_pretrained_model
+from .modeling.utils import load_contrastive_encoder_weights
 from .training.datamodule import ForgeryDataModule
 from .training.lightning_module import ForgeryLightningModule
 
@@ -36,12 +40,58 @@ def run_experiment(config: ExperimentConfig) -> Path:
     datamodule = ForgeryDataModule(config)
     datamodule.setup(stage="fit")
 
-    model = build_vision_baseline(VisionBaselineConfig())
+    def _build_pretrained() -> nn.Module:
+        encoder_weights = (
+            None
+            if config.contrastive_checkpoint is not None
+            else (
+                None
+                if config.pretrained_weights is None
+                or str(config.pretrained_weights).lower() == "none"
+                else config.pretrained_weights
+            )
+        )
+        pretrained_model = build_pretrained_model(
+            architecture=config.pretrained_architecture,
+            encoder_name=config.pretrained_encoder,
+            encoder_weights=encoder_weights,
+            num_classes=len(datamodule.class_names),
+            segmentation_classes=1,
+        )
+        if config.contrastive_checkpoint is not None:
+            load_contrastive_encoder_weights(pretrained_model, config.contrastive_checkpoint)
+        if config.freeze_encoder:
+            for param in pretrained_model.segmentation_model.encoder.parameters():
+                param.requires_grad = False
+        return pretrained_model
+
+    if config.model_type == "pretrained":
+        model = _build_pretrained()
+    elif config.model_type == "dual_stream":
+        spatial_model = _build_pretrained()
+        dual_config = DualStreamConfig(
+            spatial=PretrainedModelConfig(
+                architecture=config.pretrained_architecture,
+                encoder_name=config.pretrained_encoder,
+                encoder_weights=None,
+                num_classes=len(datamodule.class_names),
+                segmentation_classes=1,
+            ),
+            num_classes=len(datamodule.class_names),
+            frequency_channels=3,
+        )
+        model = DualStreamForgeryModel(dual_config, spatial_model=spatial_model)
+    else:
+        model = build_vision_baseline(
+            VisionBaselineConfig(num_classes=len(datamodule.class_names))
+        )
     lightning_module = ForgeryLightningModule(
         model,
         optimizer_cfg=config.optimizer,
         mask_loss_weight=config.mask_loss_weight,
         class_names=datamodule.class_names,
+        class_weights=datamodule.class_weights,
+        mask_loss=config.mask_loss,
     )
 
     checkpoint_dir = run_dir / "checkpoints"
@@ -109,6 +159,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gradient-clip", type=float)
     parser.add_argument("--max-train-steps", type=int)
     parser.add_argument("--limit-val-batches", type=int)
+    parser.add_argument("--model-type", choices=("baseline", "pretrained", "dual_stream"))
+    parser.add_argument("--pretrained-architecture")
+    parser.add_argument("--pretrained-encoder")
+    parser.add_argument("--pretrained-weights")
+    parser.add_argument("--contrastive-checkpoint", type=Path)
+    parser.add_argument("--mask-loss", choices=("bce", "combined"))
+    parser.add_argument("--no-class-weights", dest="use_class_weights", action="store_false")
+    parser.set_defaults(use_class_weights=None)
+    parser.add_argument("--freeze-encoder", action="store_true")
 
     parser.add_argument("--learning-rate", type=float)
     parser.add_argument("--weight-decay", type=float)
@@ -155,6 +214,25 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> ExperimentConfig:
     )
 
     default_cfg = ExperimentConfig()
+    model_type = args.model_type if args.model_type is not None else default_cfg.model_type
+    pretrained_architecture = (
+        args.pretrained_architecture if args.pretrained_architecture is not None else default_cfg.pretrained_architecture
+    )
+    pretrained_encoder = (
+        args.pretrained_encoder if args.pretrained_encoder is not None else default_cfg.pretrained_encoder
+    )
+    pretrained_weights = (
+        args.pretrained_weights if args.pretrained_weights is not None else default_cfg.pretrained_weights
+    )
+    use_class_weights = (
+        default_cfg.use_class_weights if args.use_class_weights is None else args.use_class_weights
+    )
+    mask_loss = args.mask_loss if args.mask_loss is not None else default_cfg.mask_loss
+    contrastive_checkpoint = (
+        args.contrastive_checkpoint
+        if args.contrastive_checkpoint is not None
+        else default_cfg.contrastive_checkpoint
+    )
     cfg = ExperimentConfig(
         data_root=args.data_root if args.data_root is not None else default_cfg.data_root,
         output_dir=args.output_dir if args.output_dir is not None else default_cfg.output_dir,
@@ -182,6 +260,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> ExperimentConfig:
         else default_cfg.limit_val_batches,
         optimizer=optimizer_cfg,
         augmentation=augmentation_cfg,
+        model_type=model_type,
+        pretrained_architecture=pretrained_architecture,
+        pretrained_encoder=pretrained_encoder,
+        pretrained_weights=pretrained_weights,
+        use_class_weights=use_class_weights,
+        mask_loss=mask_loss,
+        contrastive_checkpoint=contrastive_checkpoint,
+        freeze_encoder=args.freeze_encoder or default_cfg.freeze_encoder,
     )
     return cfg
 
@@ -195,4 +281,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-

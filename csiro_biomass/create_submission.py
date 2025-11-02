@@ -1,274 +1,145 @@
-#!/usr/bin/env python
-"""Create Kaggle submission for CSIRO Image2Biomass competition.
+#!/usr/bin/env python3
+"""Aggregate model outputs into a Kaggle-ready submission.
 
-This script generates predictions on the test set and creates a submission file
-in the correct format for Kaggle.
+This helper mirrors the workflow described in the README: after you have
+trained one or more runs with
 
-Example usage:
-    # From single model
-    python create_submission.py --checkpoint outputs/baseline/best_model.ckpt
-    
-    # From ensemble of models
-    python create_submission.py --checkpoints outputs/run1/best_model.ckpt outputs/run2/best_model.ckpt
-    
-    # From cross-validation
-    python create_submission.py --cv_dir outputs/cross_validation
+    python -m competitions.csiro_biomass.src.train ...
+
+you can point the script at the resulting run directory (or individual
+checkpoints) and it will collect the corresponding `submission.csv` files.
+
+For multiple runs/folds, the script performs a simple average using the
+ensemble utilities that ship with the starter kit.
 """
+
+from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 from pathlib import Path
-from typing import List
+from typing import Iterable, List, Optional, Sequence
 
 import pandas as pd
-import torch
-from torch.utils.data import DataLoader
 
-from src.config import Config
-from src.data.dataset import BiomassDataset
-from src.modeling.baseline import MultiModalBiomassModel
-from src.utils.ensemble import simple_average_ensemble
+from competitions.csiro_biomass.src.utils.ensemble import simple_average_ensemble
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 LOGGER = logging.getLogger(__name__)
 
 
-def load_model(checkpoint_path: Path, device: str = "cuda") -> MultiModalBiomassModel:
-    """Load trained model from checkpoint.
-    
-    Args:
-        checkpoint_path: Path to model checkpoint
-        device: Device to load model on
-    
-    Returns:
-        Loaded model
-    """
-    LOGGER.info(f"Loading model from {checkpoint_path}")
-    
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # Extract config from checkpoint
-    if 'config' in checkpoint:
-        config = checkpoint['config']
-    else:
-        # Use default config
-        config = Config()
-    
-    # Create model
-    model = MultiModalBiomassModel(config)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.to(device)
-    model.eval()
-    
-    return model
+def _resolve_run_dir(path: Path) -> Path:
+    """Return the directory that should contain submission artifacts."""
+    path = path.expanduser().resolve()
+    if path.is_file():
+        return path.parent
+    return path
 
 
-def predict_test_set(
-    model: MultiModalBiomassModel,
-    test_csv: Path,
-    image_dir: Path,
-    config: Config,
-    device: str = "cuda",
-) -> pd.DataFrame:
-    """Generate predictions on test set.
-    
-    Args:
-        model: Trained model
-        test_csv: Path to test.csv
-        image_dir: Directory containing test images
-        config: Model configuration
-        device: Device for inference
-    
-    Returns:
-        DataFrame with predictions
-    """
-    LOGGER.info("Loading test dataset...")
-    
-    # Create test dataset
-    test_dataset = BiomassDataset(
-        csv_path=test_csv,
-        image_dir=image_dir,
-        config=config,
-        is_training=False,
-    )
-    
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=config.num_workers,
-    )
-    
-    LOGGER.info(f"Generating predictions for {len(test_dataset)} samples...")
-    
-    # Generate predictions
-    predictions = []
-    sample_ids = []
-    
-    model.eval()
-    with torch.no_grad():
-        for batch in test_loader:
-            images = batch['image'].to(device)
-            metadata = batch['metadata'].to(device)
-            
-            # Get predictions (mean only, ignore variance)
-            outputs = model(images, metadata)
-            if isinstance(outputs, tuple):
-                preds = outputs[0]  # Mean predictions
-            else:
-                preds = outputs
-            
-            predictions.append(preds.cpu().numpy())
-            sample_ids.extend(batch['sample_id'])
-    
-    # Concatenate predictions
-    import numpy as np
-    predictions = np.concatenate(predictions, axis=0)
-    
-    # Create DataFrame in submission format
-    df_test = pd.read_csv(test_csv)
-    
-    # Match predictions to sample IDs
-    submission_rows = []
-    for idx, sample_id in enumerate(sample_ids):
-        # Each image has multiple targets
-        for target_idx, target_name in enumerate(config.target_names):
-            submission_rows.append({
-                'sample_id': f"{sample_id}__{target_name}",
-                'target': predictions[idx, target_idx],
-            })
-    
-    submission_df = pd.DataFrame(submission_rows)
-    
-    LOGGER.info(f"Generated {len(submission_df)} predictions")
-    
-    return submission_df
+def _candidate_submission_files(run_dir: Path) -> List[Path]:
+    """Return candidate submission files for a single run directory."""
+    candidates = [
+        run_dir / "submission.csv",
+        run_dir / "latest_submission.csv",
+    ]
+    if run_dir.name.startswith("fold-"):
+        # Nested CV fold – allow the file to live one directory deeper.
+        nested = sorted(run_dir.glob("**/submission.csv"))
+        candidates.extend(nested)
+    return [path for path in candidates if path.exists()]
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Create Kaggle submission")
-    
-    # Model options
+def _collect_submission_files(directories: Iterable[Path]) -> List[Path]:
+    files: List[Path] = []
+    for run_dir in directories:
+        run_dir = _resolve_run_dir(run_dir)
+        candidates = _candidate_submission_files(run_dir)
+        if not candidates:
+            raise FileNotFoundError(
+                f"No submission CSV discovered in '{run_dir}'. "
+                "Ensure the training run was executed with --test-csv / --sample-submission."
+            )
+        files.append(candidates[0])
+    return files
+
+
+def _submission_from_cv_dir(cv_dir: Path) -> List[Path]:
+    """Collect submission files from cross-validation folds."""
+    cv_dir = cv_dir.expanduser().resolve()
+    if not cv_dir.exists():
+        raise FileNotFoundError(f"Cross-validation directory does not exist: {cv_dir}")
+    fold_dirs = sorted(path for path in cv_dir.glob("fold-*") if path.is_dir())
+    if not fold_dirs:
+        raise FileNotFoundError(f"No fold directories found under {cv_dir}")
+    return _collect_submission_files(fold_dirs)
+
+
+def copy_single_submission(submission_path: Path, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(submission_path, output_path)
+    return output_path
+
+
+def average_submissions(
+    submission_files: Sequence[Path],
+    output_path: Path,
+    weights: Optional[Sequence[float]] = None,
+) -> Path:
+    LOGGER.info("Ensembling %d submissions", len(submission_files))
+    return simple_average_ensemble(submission_files, output_path, weights=weights)
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build a Kaggle submission from trained runs.")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--checkpoint",
-        type=Path,
-        help="Path to single model checkpoint",
-    )
-    group.add_argument(
-        "--checkpoints",
-        type=Path,
-        nargs="+",
-        help="Paths to multiple checkpoints for ensemble",
-    )
-    group.add_argument(
-        "--cv_dir",
-        type=Path,
-        help="Cross-validation directory (will ensemble all folds)",
-    )
-    
-    # Data options
-    parser.add_argument(
-        "--data_dir",
-        type=Path,
-        default=Path("csiro_biomass_extract"),
-        help="Data directory",
-    )
-    parser.add_argument(
-        "--output_path",
-        type=Path,
-        default=Path("submission.csv"),
-        help="Output submission file path",
-    )
-    
-    # Device
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device (cuda/cpu)",
-    )
-    
-    args = parser.parse_args()
-    
-    LOGGER.info("=" * 80)
-    LOGGER.info("CSIRO Image2Biomass - Submission Creation")
-    LOGGER.info("=" * 80)
-    
-    # Determine checkpoints to use
-    checkpoints = []
+    group.add_argument("--checkpoint", type=Path, help="Path to a single best_model checkpoint (parent run dir is used).")
+    group.add_argument("--checkpoints", type=Path, nargs="+", help="Paths to multiple checkpoints to ensemble.")
+    group.add_argument("--run-dir", type=Path, help="Training run directory that already contains submission.csv.")
+    group.add_argument("--run-dirs", type=Path, nargs="+", help="Multiple run directories to ensemble.")
+    group.add_argument("--cv-dir", type=Path, help="Cross-validation output directory (averages all fold submissions).")
+
+    parser.add_argument("--output-path", type=Path, default=Path("submission.csv"), help="Destination for the final submission.")
+    parser.add_argument("--weights", type=float, nargs="+", help="Optional weights when averaging multiple submissions.")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    args = parse_args(argv)
+
     if args.checkpoint:
-        checkpoints = [args.checkpoint]
+        submission_files = _collect_submission_files([args.checkpoint])
     elif args.checkpoints:
-        checkpoints = args.checkpoints
+        submission_files = _collect_submission_files(args.checkpoints)
+    elif args.run_dir:
+        submission_files = _collect_submission_files([args.run_dir])
+    elif args.run_dirs:
+        submission_files = _collect_submission_files(args.run_dirs)
     elif args.cv_dir:
-        # Find all fold checkpoints
-        for fold_dir in sorted(args.cv_dir.glob("fold_*")):
-            ckpt = fold_dir / "best_model.ckpt"
-            if ckpt.exists():
-                checkpoints.append(ckpt)
-        if not checkpoints:
-            raise ValueError(f"No checkpoints found in {args.cv_dir}")
-    
-    LOGGER.info(f"Using {len(checkpoints)} model(s)")
-    
-    # Test data paths
-    test_csv = args.data_dir / "test.csv"
-    test_image_dir = args.data_dir / "test"
-    
-    if not test_csv.exists():
-        raise FileNotFoundError(f"Test CSV not found: {test_csv}")
-    if not test_image_dir.exists():
-        raise FileNotFoundError(f"Test image directory not found: {test_image_dir}")
-    
-    # Generate predictions for each model
-    config = Config()  # Use default config
-    prediction_dfs = []
-    
-    for i, checkpoint_path in enumerate(checkpoints):
-        LOGGER.info(f"\nModel {i+1}/{len(checkpoints)}")
-        
-        model = load_model(checkpoint_path, device=args.device)
-        pred_df = predict_test_set(model, test_csv, test_image_dir, config, args.device)
-        prediction_dfs.append(pred_df)
-    
-    # Ensemble if multiple models
-    if len(prediction_dfs) > 1:
-        LOGGER.info(f"\nEnsembling {len(prediction_dfs)} models...")
-        
-        # Save individual predictions
-        temp_files = []
-        for i, df in enumerate(prediction_dfs):
-            temp_path = args.output_path.parent / f"temp_pred_{i}.csv"
-            df.to_csv(temp_path, index=False)
-            temp_files.append(temp_path)
-        
-        # Create ensemble
-        submission_df = simple_average_ensemble(
-            temp_files,
-            args.output_path,
-        )
-        
-        # Clean up temp files
-        for temp_file in temp_files:
-            temp_file.unlink()
+        submission_files = _submission_from_cv_dir(args.cv_dir)
     else:
-        submission_df = prediction_dfs[0]
-        submission_df.to_csv(args.output_path, index=False)
-    
-    LOGGER.info("\n" + "=" * 80)
-    LOGGER.info("Submission Created!")
-    LOGGER.info("=" * 80)
-    LOGGER.info(f"Submission file: {args.output_path}")
-    LOGGER.info(f"Number of predictions: {len(submission_df)}")
-    LOGGER.info("\nTo submit to Kaggle:")
-    LOGGER.info(f"  kaggle competitions submit -c csiro-biomass -f {args.output_path} -m 'My submission'")
-    LOGGER.info("=" * 80)
+        raise RuntimeError("No valid input provided.")
+
+    output_path = args.output_path.expanduser().resolve()
+    submission_files = [path.expanduser().resolve() for path in submission_files]
+
+    LOGGER.info("Collected submission files: %s", ", ".join(str(path) for path in submission_files))
+
+    if len(submission_files) == 1:
+        copy_single_submission(submission_files[0], output_path)
+        LOGGER.info("Copied submission to %s", output_path)
+    else:
+        if args.weights and len(args.weights) != len(submission_files):
+            raise ValueError("Number of weights must match the number of submissions.")
+        average_submissions(submission_files, output_path, weights=args.weights)
+        LOGGER.info("Averaged submission written to %s", output_path)
+
+    # Provide a quick sanity check by printing the number of rows / NaNs.
+    df = pd.read_csv(output_path)
+    LOGGER.info("Final submission shape: %s, missing values: %d", df.shape, int(df.isnull().sum().sum()))
+    return 0
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
 

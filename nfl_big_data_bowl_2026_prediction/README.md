@@ -76,6 +76,16 @@ metrics = run_cross_validation(
 )
 ```
 
+## GPU with Brev (optional)
+
+Need GPU capacity? Use the project wrapper `./brev_gpu.sh` to manage a Brev workspace when required.
+
+- `./brev_gpu.sh create` (first run) provisions the instance sized for this project.
+- `./brev_gpu.sh sync-up` uploads the project directory.
+- `./brev_gpu.sh shell` opens the remote GPU environment.
+
+See `../docs/brev_gpu_workflow.md` for the complete workflow and advanced overrides.
+
 ## Repository Layout
 
 - `data/` – storage for raw and processed datasets (gitignored by default).

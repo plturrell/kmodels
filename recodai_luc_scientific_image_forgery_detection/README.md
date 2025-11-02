@@ -93,6 +93,16 @@ python -m src.utils.submission \
   --use-tta
 ```
 
+## GPU with Brev (optional)
+
+Activate GPU resources on demand via the project wrapper `./brev_gpu.sh`.
+
+- `./brev_gpu.sh create` (one-time) provisions a Brev GPU instance for this project.
+- `./brev_gpu.sh sync-up` uploads the current project directory.
+- `./brev_gpu.sh shell` opens the remote GPU environment for experiments.
+
+Refer to `../docs/brev_gpu_workflow.md` for detailed instructions and overrides.
+
 ## Repository Structure
 - `src/data/dataset.py` - PyTorch Dataset with stratified splitting
 - `src/data/transforms.py` - **NEW**: Albumentations augmentation pipeline

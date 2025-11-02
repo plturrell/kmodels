@@ -11,8 +11,8 @@ from typing import Iterable, List, Optional, Sequence
 
 import pandas as pd
 
-from src.config.experiment import ExperimentConfig
-from src.train import run_cross_validation
+from competitions.csiro_biomass.src.config.experiment import ExperimentConfig
+from competitions.csiro_biomass.src.train import run_cross_validation
 
 LOGGER = logging.getLogger(__name__)
 

@@ -195,6 +195,16 @@ print(metrics)
 PY
 ```
 
+## GPU with Brev (optional)
+
+Optionally burst onto a Brev GPU by using the project wrapper `./brev_gpu.sh`.
+
+- `./brev_gpu.sh create` (one-time) provisions the GPU instance targeting this project.
+- `./brev_gpu.sh sync-up` replicates the local directory remotely.
+- `./brev_gpu.sh shell` opens a GPU-backed shell for installs and training.
+
+See `../docs/brev_gpu_workflow.md` for more guidance and advanced overrides.
+
 ## Baseline tooling
 
 - `python -m physionet_ecg_image_digitization.notebooks.eda_overview`

@@ -1,2 +1,0 @@
-"""CSIRO biomass competition utilities."""
-

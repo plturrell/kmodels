@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import pytorch_lightning as pl
 import torch
@@ -13,6 +13,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from ..config.training import OptimizerConfig
+from ..modeling.losses import CombinedLoss
 from ..utils.metrics import compute_classification_metrics, compute_segmentation_metrics
 
 
@@ -24,6 +25,8 @@ class ForgeryLightningModule(pl.LightningModule):
         optimizer_cfg: OptimizerConfig,
         mask_loss_weight: float,
         class_names: Sequence[str],
+        class_weights: Optional[torch.Tensor] = None,
+        mask_loss: str = "bce",
     ) -> None:
         super().__init__()
         self.model = model
@@ -31,8 +34,19 @@ class ForgeryLightningModule(pl.LightningModule):
         self.mask_loss_weight = mask_loss_weight
         self.class_names = list(class_names)
 
-        self.cls_criterion = nn.CrossEntropyLoss()
-        self.mask_criterion = nn.BCEWithLogitsLoss()
+        if class_weights is not None:
+            self.register_buffer("class_weight_buffer", class_weights.to(torch.float32))
+            weight = self.class_weight_buffer
+        else:
+            self.class_weight_buffer = None  # type: ignore[assignment]
+            weight = None
+
+        self.cls_criterion = nn.CrossEntropyLoss(weight=weight)
+        if mask_loss == "combined":
+            self.mask_criterion = CombinedLoss()
+        else:
+            self.mask_criterion = nn.BCEWithLogitsLoss()
+        self.mask_loss_name = mask_loss
 
         self.history: List[Dict[str, float]] = []
         self._train_loss = 0.0
@@ -45,6 +59,7 @@ class ForgeryLightningModule(pl.LightningModule):
                 "optimizer_cfg": asdict(self.optimizer_cfg),
                 "mask_loss_weight": self.mask_loss_weight,
                 "class_names": self.class_names,
+                "mask_loss": self.mask_loss_name,
             }
         )
 
@@ -199,4 +214,3 @@ class ForgeryLightningModule(pl.LightningModule):
 
 
 __all__ = ["ForgeryLightningModule"]
-

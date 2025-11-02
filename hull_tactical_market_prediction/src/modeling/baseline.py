@@ -30,24 +30,32 @@ class BaselineConfig:
     n_splits: int = 5
     time_series_cv: bool = True
     random_state: int = 42
+    max_depth: int | None = 6
+    max_iter: int | None = None
+    learning_rate: float = 0.05
+    min_samples_leaf: int | None = None
 
 
 def _build_estimator(config: BaselineConfig) -> Pipeline:
     if config.task == "classification":
+        max_iter = config.max_iter if config.max_iter is not None else 250
         model = HistGradientBoostingClassifier(
-            max_depth=6,
-            max_iter=250,
-            learning_rate=0.05,
+            max_depth=config.max_depth,
+            max_iter=max_iter,
+            learning_rate=config.learning_rate,
             l2_regularization=0.0,
             random_state=config.random_state,
+            min_samples_leaf=config.min_samples_leaf,
         )
     else:
+        max_iter = config.max_iter if config.max_iter is not None else 400
         model = HistGradientBoostingRegressor(
-            max_depth=6,
-            max_iter=400,
-            learning_rate=0.05,
+            max_depth=config.max_depth,
+            max_iter=max_iter,
+            learning_rate=config.learning_rate,
             l2_regularization=0.0,
             random_state=config.random_state,
+            min_samples_leaf=config.min_samples_leaf,
         )
 
     return Pipeline(

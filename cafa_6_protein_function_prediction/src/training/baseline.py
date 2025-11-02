@@ -79,6 +79,10 @@ def _apply_config_mapping(cfg: ExperimentConfig, mapping: Dict[str, Any]) -> Non
         cfg.model_name = str(model_cfg["embedding_model"])
     if "hidden_dims" in model_cfg and model_cfg["hidden_dims"]:
         cfg.hidden_dims = tuple(int(dim) for dim in model_cfg["hidden_dims"])
+    if "architecture" in model_cfg and model_cfg["architecture"]:
+        cfg.architecture = str(model_cfg["architecture"])
+    if "attention_heads" in model_cfg and model_cfg["attention_heads"] is not None:
+        cfg.attention_heads = int(model_cfg["attention_heads"])
     if "dropout" in model_cfg and model_cfg["dropout"] is not None:
         cfg.dropout = float(model_cfg["dropout"])
     if "use_fractal_features" in model_cfg:
@@ -139,6 +143,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--model-name")
     parser.add_argument("--hidden-dims", type=int, nargs="+")
+    parser.add_argument("--architecture", choices=["mlp", "attention"])
+    parser.add_argument("--attention-heads", type=int)
     parser.add_argument("--dropout", type=float)
 
     parser.add_argument("--batch-size", type=int)
@@ -203,6 +209,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> ExperimentConfig:
         cfg.model_name = args.model_name
     if args.hidden_dims is not None:
         cfg.hidden_dims = tuple(args.hidden_dims)
+    if args.architecture is not None:
+        cfg.architecture = args.architecture
+    if args.attention_heads is not None:
+        cfg.attention_heads = args.attention_heads
     if args.dropout is not None:
         cfg.dropout = args.dropout
 
@@ -284,6 +294,8 @@ def run_experiment(cfg: ExperimentConfig) -> Path:
         embedding_dim=datamodule.embedding_dim,
         hidden_dims=cfg.hidden_dims,
         dropout=cfg.dropout,
+        architecture=cfg.architecture,
+        attention_heads=cfg.attention_heads,
         class_names=datamodule.classes,
         optimizer_cfg=cfg.optimizer,
         val_accessions=datamodule.val_accessions,
@@ -335,6 +347,8 @@ def run_experiment(cfg: ExperimentConfig) -> Path:
         embedding_dim=datamodule.embedding_dim,
         hidden_dims=cfg.hidden_dims,
         dropout=cfg.dropout,
+        architecture=cfg.architecture,
+        attention_heads=cfg.attention_heads,
         class_names=datamodule.classes,
         optimizer_cfg=cfg.optimizer,
         val_accessions=datamodule.val_accessions,
@@ -389,5 +403,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-
-

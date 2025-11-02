@@ -212,6 +212,16 @@ python -m competitions.csiro_biomass.src.utils.leaderboard \
 
 The command requires Kaggle API credentials at `~/.kaggle/kaggle.json`. It prints the top public scores, highlights your team’s best submission, and reports how your local RMSE stacks up, so you can judge whether a run is leaderboard-ready before uploading.
 
+## GPU with Brev (optional)
+
+Use the project wrapper `./brev_gpu.sh` when you need GPU capacity on Brev without affecting the other competitions.
+
+- `./brev_gpu.sh create` (one-time) provisions a GPU instance for this project.
+- `./brev_gpu.sh sync-up` pushes the local files to that workspace.
+- `./brev_gpu.sh shell` opens an interactive shell so you can install deps and launch training.
+
+See `../docs/brev_gpu_workflow.md` for more advanced options and troubleshooting.
+
 ### Experiment tracking
 
 Example W&B invocation:

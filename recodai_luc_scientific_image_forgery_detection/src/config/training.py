@@ -48,6 +48,14 @@ class ExperimentConfig:
     gradient_clip_val: Optional[float] = 1.0
     max_train_steps: Optional[int] = None
     limit_val_batches: Optional[int] = None
+    model_type: str = "baseline"
+    pretrained_architecture: str = "Unet"
+    pretrained_encoder: str = "resnet34"
+    pretrained_weights: Optional[str] = "imagenet"
+    use_class_weights: bool = True
+    mask_loss: str = "combined"
+    contrastive_checkpoint: Optional[Path] = None
+    freeze_encoder: bool = False
 
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
@@ -56,4 +64,6 @@ class ExperimentConfig:
         cfg = asdict(self)
         cfg["data_root"] = str(self.data_root)
         cfg["output_dir"] = str(self.output_dir)
+        if self.contrastive_checkpoint is not None:
+            cfg["contrastive_checkpoint"] = str(self.contrastive_checkpoint)
         return cfg

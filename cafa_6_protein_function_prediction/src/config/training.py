@@ -37,6 +37,8 @@ class ExperimentConfig:
     model_name: str = "facebook/esm2_t6_8M_UR50D"
     hidden_dims: Sequence[int] = (512, 256)
     dropout: float = 0.3
+    architecture: str = "mlp"
+    attention_heads: int = 8
 
     batch_size: int = 32
     num_workers: int = 0
@@ -70,9 +72,9 @@ class ExperimentConfig:
         payload["ontology_path"] = str(self.ontology_path)
         payload["output_dir"] = str(self.output_dir)
         payload["hidden_dims"] = list(self.hidden_dims)
+        payload["architecture"] = str(self.architecture)
         payload["embedding_cache_dir"] = (
             str(self.embedding_cache_dir) if self.embedding_cache_dir is not None else None
         )
         return payload
-
 

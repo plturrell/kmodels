@@ -74,7 +74,7 @@ Adjust or extend this scaffold as the project evolves.
 
 ## Recent Improvements
 
-This workspace has been significantly enhanced with 14 major improvements:
+This workspace has been significantly enhanced with 17 major improvements:
 
 ### 🐛 Bug Fixes
 - Fixed embedding type conversion issues in neural baseline
@@ -86,8 +86,8 @@ This workspace has been significantly enhanced with 14 major improvements:
 - **Fractal features**: Novel feature extraction (with validation framework)
 
 ### 🎯 Model Improvements
-- **Attention-based architecture**: Multi-head self-attention for better representations
-- **Ensemble methods**: Stacking, weighted averaging, and optimization
+- **Attention-based architecture**: Multi-head self-attention for better representations (see `configs/fractal.yaml`)
+- **Ensemble methods**: Weighted/optimised blending via the CLI utilities
 - **Data augmentation**: Property-preserving sequence mutations
 
 ### 📊 Evaluation & Metrics
@@ -97,9 +97,9 @@ This workspace has been significantly enhanced with 14 major improvements:
 
 ### 🛠️ Development Tools
 - **Configuration management**: YAML-based configs with OmegaConf
-- **Comprehensive tests**: pytest suite with 90%+ coverage
+- **Comprehensive tests**: pytest suite covering critical utilities
 - **CI/CD pipeline**: GitHub Actions for automated testing
-- **Model interpretability**: Attention visualization and feature importance
+- **Model interpretability**: Attention visualization and feature importance CLIs
 
 ### 🎓 Advanced Features
 - **Active learning**: Smart sample selection for annotation
@@ -121,6 +121,19 @@ python train_neural.py --config fractal
 python train_neural.py --config default --num_epochs 100 --batch_size 64
 ```
 
+### Train Lightning Baseline
+```bash
+# Standard Lightning run (MLP architecture)
+python -m competitions.cafa_6_protein_function_prediction.src.training.baseline --config default
+
+# Attention + fractal features
+python -m competitions.cafa_6_protein_function_prediction.src.training.baseline --config fractal
+
+# Override architecture on the CLI
+python -m competitions.cafa_6_protein_function_prediction.src.training.baseline \
+  --config default --architecture attention --attention-heads 8
+```
+
 ### Run Cross-Validation
 ```python
 from src.training import cross_validate
@@ -135,6 +148,42 @@ results = cross_validate(samples, train_fn, eval_fn, n_splits=5)
 python benchmark_fractal.py --max_samples 5000 --n_folds 5
 ```
 
+### Visualise Attention Weights
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.utils.interpretability_cli \
+  attention \
+  --run-dir outputs/lightning_baseline/run-YYYYMMDD-HHMMSS \
+  --top-k 5
+```
+
+### Export Predictions (TSV + JSON)
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.training.inference \
+  --run-dir outputs/lightning_baseline/run-YYYYMMDD-HHMMSS \
+  --fasta data/raw/cafa-6-protein-function-prediction/Test/test_sequences.fasta \
+  --output outputs/submissions/run-YYYYMMDD-HHMMSS.tsv \
+  --json-output outputs/predictions/run-YYYYMMDD-HHMMSS.json
+```
+
+### Permutation Feature Importance (Baseline)
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.utils.interpretability_cli \
+  importance \
+  --model-path outputs/baseline/baseline_model.joblib \
+  --fasta data/raw/cafa-6-protein-function-prediction/Train/train_sequences.fasta \
+  --annotations data/raw/cafa-6-protein-function-prediction/Train/train_terms.tsv \
+  --use-embeddings --top-k 15
+```
+
+### Generate Active Learning Report
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.utils.active_learning_cli \
+  --predictions outputs/predictions/run-YYYYMMDD-HHMMSS.json \
+  --fasta data/raw/cafa-6-protein-function-prediction/Test/test_sequences.fasta \
+  --strategy entropy --n-samples 100 \
+  --output outputs/active_learning_report.txt
+```
+
 ### Use Embedding Cache
 ```python
 from src.features.embedding_cache import EmbeddingCache
@@ -144,7 +193,7 @@ cache = EmbeddingCache(cache_dir="data/processed/embeddings")
 embeddings = embed_sequences(samples, cache=cache, return_array=True)
 ```
 
-### Train Ensemble
+### Train Ensemble (API)
 ```python
 from src.modeling import EnsemblePredictor
 
@@ -153,6 +202,34 @@ ensemble.add_model(model1, weight=0.6)
 ensemble.add_model(model2, weight=0.4)
 predictions = ensemble.predict_proba(X_test)
 ```
+
+### Blend Lightning Runs
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.modeling.ensemble_cli \
+  --predictions outputs/predictions/run_a.json outputs/predictions/run_b.json \
+  --method optimize \
+  --ground-truth data/raw/cafa-6-protein-function-prediction/Train/train_terms.tsv \
+  --output outputs/ensemble/optimized_predictions.json --evaluate
+```
+
+### Aggregate Run Metrics
+```bash
+python -m competitions.cafa_6_protein_function_prediction.src.utils.evaluate_runs \
+  --run-dir outputs/real_run/run-20251102-091103 \
+  --metrics-file outputs/real_run/ensemble_predictions.metrics.json \
+  --label ensemble \
+  --json-output outputs/real_run/aggregated_metrics.json
+```
+
+## GPU with Brev (optional)
+
+A project-scoped wrapper script is available at `./brev_gpu.sh` so you can opt into GPU training on Brev without touching other competitions.
+
+- `./brev_gpu.sh create` (first run) provisions a GPU instance sized for this project.
+- `./brev_gpu.sh sync-up` copies the project directory to that instance.
+- `./brev_gpu.sh shell` opens an interactive session on the GPU box for installs and training.
+
+See `../docs/brev_gpu_workflow.md` for advanced usage, overrides, and troubleshooting.
 
 ## Testing
 

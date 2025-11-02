@@ -138,6 +138,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Random seed for the model and CV splitters (default: 42).",
     )
     parser.add_argument(
+        "--gbm-max-depth",
+        type=int,
+        default=6,
+        help="Maximum depth for the hist gradient boosting trees (default: 6).",
+    )
+    parser.add_argument(
+        "--gbm-max-iter",
+        type=int,
+        help="Number of boosting iterations. Defaults to 250 for classification and 400 for regression.",
+    )
+    parser.add_argument(
+        "--gbm-learning-rate",
+        type=float,
+        default=0.05,
+        help="Learning rate for the gradient boosting model (default: 0.05).",
+    )
+    parser.add_argument(
+        "--gbm-min-samples-leaf",
+        type=int,
+        help="Minimum samples per leaf for the gradient boosting model (default: sklearn default of 20).",
+    )
+    parser.add_argument(
         "--save-model",
         action="store_true",
         help="Persist the trained model as model.joblib inside the run directory.",
@@ -232,7 +254,14 @@ def main(argv: list[str] | None = None) -> int:
     submission_column = args.submission_column or args.target_column
 
     baseline_config = BaselineConfig(
-        task=task, n_splits=args.cv_splits, time_series_cv=not args.no_time_series_cv, random_state=args.random_state
+        task=task,
+        n_splits=args.cv_splits,
+        time_series_cv=not args.no_time_series_cv,
+        random_state=args.random_state,
+        max_depth=args.gbm_max_depth,
+        max_iter=args.gbm_max_iter,
+        learning_rate=args.gbm_learning_rate,
+        min_samples_leaf=args.gbm_min_samples_leaf,
     )
 
     LOGGER.info("Training baseline model.")
@@ -258,6 +287,10 @@ def main(argv: list[str] | None = None) -> int:
         "cv_splits": args.cv_splits,
         "time_series_cv": not args.no_time_series_cv,
         "random_state": args.random_state,
+        "gbm_max_depth": args.gbm_max_depth,
+        "gbm_max_iter": args.gbm_max_iter,
+        "gbm_learning_rate": args.gbm_learning_rate,
+        "gbm_min_samples_leaf": args.gbm_min_samples_leaf,
     }
     (run_dir / "run_config.json").write_text(json.dumps(run_config, indent=2))
 

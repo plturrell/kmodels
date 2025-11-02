@@ -10,14 +10,14 @@ pip install -r requirements.txt
 ## Download Data
 
 ```bash
-python -m src.data.download --download-dir data/raw --extract
+python -m competitions.csiro_biomass.src.data.download --download-dir data/raw --extract
 ```
 
 ## Training Options
 
 ### Option 1: Baseline (EfficientNet-B3)
 ```bash
-python -m src.train \
+python -m competitions.csiro_biomass.src.train \
   --train-csv data/raw/csiro-biomass/train.csv \
   --test-csv data/raw/csiro-biomass/test.csv \
   --sample-submission data/raw/csiro-biomass/sample_submission.csv \
@@ -30,7 +30,7 @@ python -m src.train \
 
 ### Option 2: With Perceiver Fusion (Recommended)
 ```bash
-python -m src.train \
+python -m competitions.csiro_biomass.src.train \
   --train-csv data/raw/csiro-biomass/train.csv \
   --test-csv data/raw/csiro-biomass/test.csv \
   --sample-submission data/raw/csiro-biomass/sample_submission.csv \
@@ -47,7 +47,7 @@ python -m src.train \
 
 ### Option 3: With TTA (Test-Time Augmentation)
 ```python
-from src.utils.tta import TTAWrapper, MultiCropTTA
+from competitions.csiro_biomass.src.utils.tta import TTAWrapper, MultiCropTTA
 import torch
 
 # Load trained model
@@ -66,7 +66,7 @@ predictions = multi_crop(pil_image, metadata)
 
 ### Option 4: Cross-Validation
 ```bash
-python -m src.train \
+python -m competitions.csiro_biomass.src.train \
   --train-csv data/raw/csiro-biomass/train.csv \
   --image-dir data/raw/csiro-biomass \
   --output-dir outputs/cv \
@@ -77,7 +77,7 @@ python -m src.train \
 ## Ablation Study
 
 ```bash
-python -m src.ablation_runner \
+python -m competitions.csiro_biomass.src.ablation_runner \
   --train-csv data/raw/csiro-biomass/train.csv \
   --image-dir data/raw/csiro-biomass \
   --test-csv data/raw/csiro-biomass/test.csv \
@@ -95,8 +95,8 @@ This runs:
 
 ```python
 from pathlib import Path
-from src.config.experiment import ExperimentConfig
-from src.search import SimpleMCTS
+from competitions.csiro_biomass.src.config.experiment import ExperimentConfig
+from competitions.csiro_biomass.src.search import SimpleMCTS
 
 seed_cfg = ExperimentConfig(
     train_csv=Path('data/raw/csiro-biomass/train.csv'),
@@ -113,7 +113,7 @@ print('Best config:', best_cfg.to_dict())
 
 ### ONNX Export
 ```bash
-python -m src.export \
+python -m competitions.csiro_biomass.src.export \
   --run-dir outputs/baseline/run-20250101-123000 \
   --output artifacts/model.onnx \
   --format onnx --opset 17
@@ -121,7 +121,7 @@ python -m src.export \
 
 ### TorchScript Export
 ```bash
-python -m src.export \
+python -m competitions.csiro_biomass.src.export \
   --run-dir outputs/baseline/run-20250101-123000 \
   --output artifacts/model.pt \
   --format torchscript
@@ -131,12 +131,12 @@ python -m src.export \
 
 1. **Start with Perceiver fusion**
    ```bash
-   python -m src.train --fusion-type perceiver ...
+   python -m competitions.csiro_biomass.src.train --fusion-type perceiver ...
    ```
 
 2. **Run ablation study**
    ```bash
-   python -m src.ablation_runner ...
+   python -m competitions.csiro_biomass.src.ablation_runner ...
    ```
 
 3. **Use TTA for inference**
@@ -146,7 +146,7 @@ python -m src.export \
 
 4. **Run cross-validation**
    ```bash
-   python -m src.train --n-folds 5 --cv-group-column State
+   python -m competitions.csiro_biomass.src.train --n-folds 5 --cv-group-column State
    ```
 
 5. **MCTS search for optimal hyperparameters**
@@ -198,7 +198,7 @@ python -m src.export \
 
 ### Custom Augmentation Policy
 ```bash
-python -m src.train \
+python -m competitions.csiro_biomass.src.train \
   --augmentation-policy randaugment \
   --randaugment-magnitude 10 \
   --randaugment-num-ops 2
@@ -206,7 +206,7 @@ python -m src.train \
 
 ### Weights & Biases Tracking
 ```bash
-python -m src.train \
+python -m competitions.csiro_biomass.src.train \
   --wandb-project biomass \
   --wandb-entity your-team \
   --wandb-run-name perceiver-experiment
@@ -214,7 +214,7 @@ python -m src.train \
 
 ### Leaderboard Comparison
 ```bash
-python -m src.utils.leaderboard \
+python -m competitions.csiro_biomass.src.utils.leaderboard \
   --competition csiro-biomass \
   --team "Your Team Name" \
   --metrics-file outputs/baseline/run-*/run_summary.json
@@ -227,4 +227,3 @@ python -m src.utils.leaderboard \
 - Check notebooks for EDA examples
 
 Good luck with the competition! 🌱🔬🚀
-

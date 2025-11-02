@@ -55,6 +55,10 @@ def _load_experiment_config(config_path: Path) -> ExperimentConfig:
     if data.get("embedding_cache_dir") is not None:
         data["embedding_cache_dir"] = Path(data["embedding_cache_dir"])
     data["hidden_dims"] = tuple(data.get("hidden_dims", ()))
+    if "architecture" in data:
+        data["architecture"] = str(data["architecture"])
+    if "attention_heads" in data:
+        data["attention_heads"] = int(data["attention_heads"])
     data["optimizer"] = _load_optimizer(data["optimizer"])
     data["augmentation"] = _load_augmentation(data["augmentation"])
     return ExperimentConfig(**data)
@@ -161,12 +165,16 @@ def predict_sequences(
     embedding_dim = int(hparams.get("embedding_dim", embeddings.shape[1]))
     hidden_dims = tuple(hparams.get("hidden_dims", tuple(config.hidden_dims)))
     dropout = float(hparams.get("dropout", config.dropout))
+    architecture = str(hparams.get("architecture", getattr(config, "architecture", "mlp"))).lower()
+    attention_heads = int(hparams.get("attention_heads", getattr(config, "attention_heads", 8)))
 
     module = ProteinLightningModule.load_from_checkpoint(
         artifacts.checkpoint_path,
         embedding_dim=embedding_dim,
         hidden_dims=hidden_dims,
         dropout=dropout,
+        architecture=architecture,
+        attention_heads=attention_heads,
         class_names=list(artifacts.class_names),
         optimizer_cfg=config.optimizer,
         val_accessions=[],
@@ -234,6 +242,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, help="Inference batch size")
     parser.add_argument("--embedding-batch-size", type=int, help="Batch size for embedding extraction")
     parser.add_argument("--device", type=str, help="Device for embedding + inference (e.g. cpu, cuda)")
+    parser.add_argument("--json-output", type=Path, help="Optional path to store raw probability predictions as JSON")
     parser.add_argument("--use-cache", action="store_true", help="Force embedding cache usage")
     parser.add_argument("--no-cache", action="store_true", help="Disable embedding cache usage")
     parser.add_argument("--cache-dir", type=Path, help="Embedding cache directory override")
@@ -288,6 +297,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cache_use_disk=cache_disk_override,
     )
 
+    if args.json_output:
+        json_path = args.json_output.resolve()
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(predictions, indent=2), encoding="utf-8")
+        LOGGER.info("Saved raw predictions to %s", json_path)
+
     create_submission_from_predictions(
         predictions,
         args.output,
@@ -301,5 +316,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-
-

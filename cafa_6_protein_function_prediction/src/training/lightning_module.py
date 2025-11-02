@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ..config.training import OptimizerConfig
+from ..modeling.attention_model import AttentionProteinPredictor
 from ..modeling.neural_baseline import ProteinFunctionPredictor
 from ..utils.cafa_metrics import evaluate_cafa_metrics
 
@@ -25,6 +26,8 @@ class ProteinLightningModule(pl.LightningModule):
         embedding_dim: int,
         hidden_dims: Sequence[int],
         dropout: float,
+        architecture: str,
+        attention_heads: int,
         class_names: Sequence[str],
         optimizer_cfg: OptimizerConfig,
         val_accessions: Sequence[str],
@@ -32,17 +35,32 @@ class ProteinLightningModule(pl.LightningModule):
         ontology,
     ) -> None:
         super().__init__()
-        self.model = ProteinFunctionPredictor(
-            embedding_dim=embedding_dim,
-            num_labels=len(class_names),
-            hidden_dims=hidden_dims,
-            dropout=dropout,
-        )
+        architecture = architecture.lower()
+        if architecture == "attention":
+            self.model = AttentionProteinPredictor(
+                embedding_dim=embedding_dim,
+                num_labels=len(class_names),
+                num_heads=attention_heads,
+                hidden_dims=hidden_dims,
+                dropout=dropout,
+            )
+        elif architecture == "mlp":
+            self.model = ProteinFunctionPredictor(
+                embedding_dim=embedding_dim,
+                num_labels=len(class_names),
+                hidden_dims=hidden_dims,
+                dropout=dropout,
+            )
+        else:
+            raise ValueError(f"Unknown architecture '{architecture}'. Expected 'mlp' or 'attention'.")
+
         self.optimizer_cfg = optimizer_cfg
         self.class_names = list(class_names)
         self.val_accessions = list(val_accessions)
         self.val_ground_truth = {key: set(value) for key, value in val_ground_truth.items()}
         self.ontology = ontology
+        self.architecture = architecture
+        self.attention_heads = attention_heads
 
         self.criterion = nn.BCEWithLogitsLoss()
         self.history: List[Dict[str, float]] = []
@@ -59,6 +77,8 @@ class ProteinLightningModule(pl.LightningModule):
                 "embedding_dim": embedding_dim,
                 "hidden_dims": list(hidden_dims),
                 "dropout": dropout,
+                "architecture": architecture,
+                "attention_heads": attention_heads,
                 "class_names": self.class_names,
                 "optimizer_cfg": asdict(self.optimizer_cfg),
             }
@@ -196,4 +216,12 @@ class ProteinLightningModule(pl.LightningModule):
             "probabilities": probabilities,
         }
 
-
+    # ------------------------------------------------------------------
+    # Interpretability helpers
+    # ------------------------------------------------------------------
+    def extract_attention(self, embeddings: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return logits and attention weights for attention-based models."""
+        if self.architecture != "attention":
+            raise RuntimeError("Attention weights are only available for the 'attention' architecture.")
+        logits, attention = self.model(embeddings, return_attention=True)
+        return logits, attention

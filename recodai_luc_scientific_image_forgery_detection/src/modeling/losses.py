@@ -152,10 +152,38 @@ class CombinedLoss(nn.Module):
         return self.dice_weight * dice + self.bce_weight * bce
 
 
+class ContrastiveLoss(nn.Module):
+    """NT-Xent loss for region-level contrastive supervision."""
+
+    def __init__(self, temperature: float = 0.2):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, z_i: torch.Tensor, z_j: torch.Tensor) -> torch.Tensor:
+        if z_i.shape != z_j.shape:
+            raise ValueError("Contrastive pairs must share the same shape")
+
+        batch_size = z_i.shape[0]
+        representations = torch.cat([z_i, z_j], dim=0)
+        representations = nn.functional.normalize(representations, dim=1)
+        similarity = representations @ representations.T
+
+        mask = torch.eye(2 * batch_size, dtype=torch.bool, device=similarity.device)
+        similarity = similarity / self.temperature
+        similarity = similarity.masked_fill(mask, float("-inf"))
+
+        positives = torch.arange(batch_size, device=similarity.device)
+        targets = torch.cat([positives + batch_size, positives], dim=0)
+
+        loss = nn.functional.cross_entropy(similarity, targets)
+        return loss
+
+
 __all__ = [
     "FocalLoss",
     "DiceLoss",
     "TverskyLoss",
     "CombinedLoss",
+    "ContrastiveLoss",
 ]
 

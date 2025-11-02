@@ -91,7 +91,7 @@ class PretrainedForgeryModel(nn.Module):
         class_logits = self.classifier(features[-1])
         
         # Segmentation from decoder
-        mask_logits = self.segmentation_model.decoder(*features)
+        mask_logits = self.segmentation_model.decoder(features)
         mask_logits = self.segmentation_model.segmentation_head(mask_logits)
         
         return class_logits, mask_logits
@@ -150,4 +150,3 @@ __all__ = [
     "build_pretrained_model",
     "ENCODER_CONFIGS",
 ]
-

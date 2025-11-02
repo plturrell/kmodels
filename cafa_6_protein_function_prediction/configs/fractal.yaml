@@ -4,6 +4,8 @@ defaults:
   - default
 
 model:
+  architecture: "attention"
+  attention_heads: 8
   use_fractal_features: true
   fractal_max_iter: 100
   hidden_dims: [768, 512, 256]  # Larger network for more features
@@ -14,4 +16,3 @@ training:
 
 output:
   output_dir: "outputs/neural_fractal"
-
