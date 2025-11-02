@@ -98,6 +98,8 @@ def _apply_config_mapping(cfg: ExperimentConfig, mapping: Dict[str, Any]) -> Non
     if "num_epochs" in training_cfg and training_cfg["num_epochs"] is not None:
         cfg.epochs = int(training_cfg["num_epochs"])
     if "gradient_clip" in training_cfg:
+    if "save_oof" in training_cfg:
+        cfg.save_oof = bool(training_cfg["save_oof"])
         cfg.optimizer.gradient_clip_val = training_cfg["gradient_clip"]
     if "embedding_batch_size" in training_cfg and training_cfg["embedding_batch_size"] is not None:
         cfg.embedding_batch_size = int(training_cfg["embedding_batch_size"])
@@ -170,6 +172,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--precision")
     parser.add_argument("--max-train-steps", type=int)
     parser.add_argument("--limit-val-batches", type=int)
+    parser.add_argument("--save-oof", action="store_true", help="Persist validation predictions with ground truth for post-hoc analysis.")
 
     parser.add_argument("--learning-rate", type=float)
     parser.add_argument("--weight-decay", type=float)
@@ -278,6 +281,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> ExperimentConfig:
         cfg.optimizer.scheduler_factor = args.scheduler_factor
     if args.gradient_clip is not None:
         cfg.optimizer.gradient_clip_val = args.gradient_clip
+    if args.save_oof:
+        cfg.save_oof = True
 
     return cfg
 
@@ -301,6 +306,8 @@ def run_experiment(cfg: ExperimentConfig) -> Path:
         val_accessions=datamodule.val_accessions,
         val_ground_truth=datamodule.val_ground_truth,
         ontology=datamodule.ontology,
+        save_oof=cfg.save_oof,
+        output_dir=run_dir,
     )
 
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
@@ -354,6 +361,8 @@ def run_experiment(cfg: ExperimentConfig) -> Path:
         val_accessions=datamodule.val_accessions,
         val_ground_truth=datamodule.val_ground_truth,
         ontology=datamodule.ontology,
+        save_oof=False,
+        output_dir=run_dir,
     )
     best_module.eval()
     predictions = trainer.predict(best_module, dataloaders=datamodule.val_dataloader())

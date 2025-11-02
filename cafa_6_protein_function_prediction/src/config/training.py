@@ -64,6 +64,7 @@ class ExperimentConfig:
 
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
+    save_oof: bool = False
 
     def to_dict(self) -> Dict[str, object]:
         payload = asdict(self)
@@ -77,4 +78,3 @@ class ExperimentConfig:
             str(self.embedding_cache_dir) if self.embedding_cache_dir is not None else None
         )
         return payload
-

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -33,6 +35,8 @@ class ProteinLightningModule(pl.LightningModule):
         val_accessions: Sequence[str],
         val_ground_truth: Dict[str, Sequence[str]],
         ontology,
+        save_oof: bool = False,
+        output_dir: Optional[Path] = None,
     ) -> None:
         super().__init__()
         architecture = architecture.lower()
@@ -61,6 +65,8 @@ class ProteinLightningModule(pl.LightningModule):
         self.ontology = ontology
         self.architecture = architecture
         self.attention_heads = attention_heads
+        self.save_oof = bool(save_oof)
+        self.output_dir = Path(output_dir) if output_dir is not None else None
 
         self.criterion = nn.BCEWithLogitsLoss()
         self.history: List[Dict[str, float]] = []
@@ -81,6 +87,7 @@ class ProteinLightningModule(pl.LightningModule):
                 "attention_heads": attention_heads,
                 "class_names": self.class_names,
                 "optimizer_cfg": asdict(self.optimizer_cfg),
+                "save_oof": self.save_oof,
             }
         )
 
@@ -136,17 +143,20 @@ class ProteinLightningModule(pl.LightningModule):
         logits = torch.cat([item["logits"] for item in self._val_storage], dim=0)
         targets = torch.cat([item["targets"] for item in self._val_storage], dim=0)
         indices = torch.cat([item["indices"] for item in self._val_storage], dim=0)
-        losses = torch.stack([item["loss"] for item in self._val_storage])
 
         order = torch.argsort(indices)
         logits = logits[order]
         targets = targets[order]
 
+        order_np = order.cpu().numpy()
+        ordered_accessions = np.array(self.val_accessions)[order_np]
+        targets_np = targets.numpy()
+
         val_loss = F.binary_cross_entropy_with_logits(logits, targets).item()
         probs = torch.sigmoid(logits).numpy()
 
         predictions: Dict[str, Dict[str, float]] = {}
-        for accession, prob_vector in zip(self.val_accessions, probs):
+        for accession, prob_vector in zip(ordered_accessions, probs):
             predictions[accession] = {
                 go_term: float(prob)
                 for go_term, prob in zip(self.class_names, prob_vector)
@@ -157,6 +167,16 @@ class ProteinLightningModule(pl.LightningModule):
             {key: set(value) for key, value in self.val_ground_truth.items()},
             self.ontology,
         )
+
+        if self.save_oof and self.output_dir is not None:
+            oof_df = pd.DataFrame(probs, columns=self.class_names)
+            for idx, name in enumerate(self.class_names):
+                oof_df[f"{name}_actual"] = targets_np[:, idx]
+            oof_df.insert(0, "accession", ordered_accessions)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            oof_path = self.output_dir / "oof_predictions.csv"
+            oof_df.to_csv(oof_path, index=False)
+
 
         self.log("val_loss", val_loss, prog_bar=True)
         self.log("val_fmax", metrics.get("fmax", 0.0), prog_bar=True)
