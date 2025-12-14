@@ -160,3 +160,5 @@ class AlgebraSolver(BaseSolver):
             print(f"Error solving system: {e}")
             return None
 
+        return None
+

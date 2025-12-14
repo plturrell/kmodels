@@ -1,20 +1,19 @@
 """Advanced ensemble framework for multiple solvers."""
 
-from typing import Dict, List, Optional, Tuple
+from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections import defaultdict
+from typing import Dict, List, Optional, Protocol
 
 from .llm_base import LLMSolver
 from .symbolic_solver import SymbolicSolver
 from .hybrid_solver import HybridSolver
 
-if TYPE_CHECKING:
-    from ..utils.solution_verifier import SolutionVerifier
-else:
-    try:
-        from ..utils.solution_verifier import SolutionVerifier
-    except ImportError:
-        SolutionVerifier = None
+from ..utils.solution_verifier import SolutionVerifier
+
+
+class SupportsSolve(Protocol):
+    def solve(self, problem_statement: str) -> int: ...
 
 
 class SolverResult:
@@ -43,7 +42,7 @@ class EnsembleSolver:
 
     def __init__(
         self,
-        solvers: List[object],
+        solvers: List[SupportsSolve],
         weights: Optional[List[float]] = None,
         method: str = "weighted_majority",
         use_verification: bool = True,
@@ -64,15 +63,18 @@ class EnsembleSolver:
             use_verification: Whether to verify solutions
             min_agreement: Minimum agreement threshold for consensus method
         """
-        self.solvers = solvers
-        self.weights = weights or [1.0 / len(solvers)] * len(solvers)
-        if len(self.weights) != len(solvers):
-            self.weights = [1.0 / len(solvers)] * len(solvers)
+        self.solvers: List[SupportsSolve] = solvers
+        if solvers:
+            self.weights = weights or [1.0 / len(solvers)] * len(solvers)
+            if len(self.weights) != len(solvers):
+                self.weights = [1.0 / len(solvers)] * len(solvers)
+        else:
+            self.weights = []
 
         self.method = method
-        self.use_verification = use_verification and SolutionVerifier is not None
+        self.use_verification = use_verification
         self.min_agreement = min_agreement
-        self.verifier = SolutionVerifier() if (use_verification and SolutionVerifier is not None) else None
+        self.verifier: Optional[SolutionVerifier] = SolutionVerifier() if use_verification else None
 
         # Performance tracking
         self.solver_performance: Dict[str, Dict[str, float]] = {}
@@ -118,19 +120,19 @@ class EnsembleSolver:
 
     def _get_solver_results(self, problem_statement: str) -> List[SolverResult]:
         """Get results from all solvers."""
-        results = []
+        results: List[SolverResult] = []
 
         for i, solver in enumerate(self.solvers):
             try:
                 answer = solver.solve(problem_statement)
                 if 0 <= answer <= 99999:
                     # Try to get confidence if solver supports it
-                    confidence = getattr(solver, "confidence", 1.0) if hasattr(solver, "confidence") else 1.0
+                    confidence = float(getattr(solver, "confidence", 1.0))
                     solver_name = type(solver).__name__
                     
                     results.append(SolverResult(
                         answer=answer,
-                        confidence=confidence * self.weights[i],  # Apply weight
+                        confidence=confidence * (self.weights[i] if i < len(self.weights) else 1.0),  # Apply weight
                         solver_name=solver_name,
                     ))
             except Exception as e:
@@ -147,8 +149,7 @@ class EnsembleSolver:
 
     def _weighted_majority(self, results: List[SolverResult]) -> int:
         """Weighted majority voting."""
-        from collections import defaultdict
-        weighted_votes = defaultdict(float)
+        weighted_votes: defaultdict[int, float] = defaultdict(float)
 
         for result in results:
             weighted_votes[result.answer] += result.confidence
@@ -157,20 +158,19 @@ class EnsembleSolver:
 
     def _confidence_weighted(self, results: List[SolverResult]) -> int:
         """Weight by solver confidence scores."""
-        from collections import defaultdict
-        weighted_sum = defaultdict(float)
-        total_weight = defaultdict(float)
+        weighted_sum: defaultdict[int, float] = defaultdict(float)
+        total_weight: defaultdict[int, float] = defaultdict(float)
 
         for result in results:
             weighted_sum[result.answer] += result.answer * result.confidence
             total_weight[result.answer] += result.confidence
 
         # Return answer with highest weighted average
-        best_answer = None
-        best_score = -1
+        best_answer: Optional[int] = None
+        best_score: float = -1.0
 
         for answer in weighted_sum:
-            score = weighted_sum[answer] / total_weight[answer] if total_weight[answer] > 0 else 0
+            score = weighted_sum[answer] / total_weight[answer] if total_weight[answer] > 0 else 0.0
             if score > best_score:
                 best_score = score
                 best_answer = answer

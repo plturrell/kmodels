@@ -1,52 +1,25 @@
 """Baseline training script."""
 
-import argparse
 from pathlib import Path
+from typing import Optional
 
 from ..config import load_config
 from ..data.loader import load_problems
 from .trainer import AIMOTrainer
 
 
-def main():
-    """Main training entry point."""
-    parser = argparse.ArgumentParser(description="Train baseline model for AIMO 3")
-    parser.add_argument(
-        "--config",
-        default="baseline",
-        help="Configuration name (default: baseline)",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        help="Data directory (default: from config)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Output directory (default: outputs/baseline)",
-    )
-    parser.add_argument(
-        "--model-name",
-        help="Model name (default: from config)",
-    )
-
-    args = parser.parse_args()
-
-    # Load configuration
-    config = load_config(args.config)
+def main(config_name: str = "baseline", model_name: Optional[str] = None) -> None:
+    """Main training entry point (safe defaults, no CLI paths)."""
+    project_root = Path(__file__).parent.parent.parent
+    config = load_config(config_name)
     config_dict = config.to_dict()
 
-    # Override with CLI args
-    if args.data_dir:
-        config_dict["data"]["data_dir"] = str(args.data_dir)
-    if args.output_dir:
-        config_dict["output_dir"] = str(args.output_dir)
-    if args.model_name:
-        config_dict["model"]["model_name"] = args.model_name
+    if model_name:
+        config_dict["model"]["model_name"] = model_name
 
     # Load data
-    data_dir = Path(config_dict["data"]["data_dir"])
+    data_dir_name = Path(str(config_dict["data"]["data_dir"])).name
+    data_dir = (project_root / "data" / data_dir_name).resolve()
     problems = load_problems(data_dir)
 
     # Split train/val
@@ -56,7 +29,8 @@ def main():
     val_problems = problems[split_idx:] if split_idx < len(problems) else []
 
     # Initialize trainer
-    output_dir = Path(config_dict.get("output_dir", "outputs/baseline"))
+    output_dir_name = Path(str(config_dict.get("output_dir", "baseline"))).name
+    output_dir = (project_root / "outputs" / output_dir_name).resolve()
     trainer = AIMOTrainer(
         model_name=config_dict["model"]["model_name"],
         output_dir=output_dir,

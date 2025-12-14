@@ -93,7 +93,7 @@ class GeometryJEPADataset(Dataset[Tuple[Tensor, Tensor]]):
         if torch.rand(()) < self.future_mask_prob and T > 1:
             # Mask a single step from the latter half of the trajectory.
             start = max(1, T // 2)
-            k = torch.randint(start, T, ()).item()
+            k = int(torch.randint(start, T, ()).item())
             mask[k] = True
         else:
             # Random masking with a minimum of 1 masked position.

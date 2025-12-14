@@ -98,7 +98,7 @@ class RestrictedCodeExecutor:
 
         # Create restricted environment
         restricted_globals = self._create_restricted_globals()
-        restricted_locals = {}
+        restricted_locals: Dict[str, Any] = {}
 
         # Capture output
         stdout_capture = io.StringIO()
@@ -132,8 +132,8 @@ class RestrictedCodeExecutor:
     def _create_restricted_globals(self) -> Dict[str, Any]:
         """Create restricted global namespace."""
         import builtins
-        builtins_dict = builtins.__dict__ if isinstance(builtins, type) else builtins
-        restricted_globals = {
+        builtins_dict: Dict[str, Any] = builtins.__dict__
+        restricted_globals: Dict[str, Any] = {
             "__builtins__": {name: builtins_dict[name] for name in self.ALLOWED_BUILTINS if name in builtins_dict},
         }
 

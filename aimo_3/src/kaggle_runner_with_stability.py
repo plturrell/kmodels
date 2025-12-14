@@ -7,7 +7,7 @@ enabling reliability tracking during competition testing.
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 import sys
 
 # Add project root to path
@@ -15,6 +15,11 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from src.orchestration import create_aimo_orchestrator
+
+
+class ProblemResult(TypedDict):
+    problem_id: str
+    answer: int
 
 
 class StabilityAwareKaggleRunner:
@@ -48,7 +53,7 @@ class StabilityAwareKaggleRunner:
         self.stability_output_dir = Path(stability_output_dir)
         self.stability_output_dir.mkdir(parents=True, exist_ok=True)
         
-        self.problem_results = []
+        self.problem_results: list[ProblemResult] = []
         
     def solve_problem(self, problem_id: str, problem_statement: str) -> int:
         """
@@ -140,22 +145,22 @@ class StabilityAwareKaggleRunner:
         Args:
             output_path: Path to save submission CSV
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         
         try:
             import polars as pl
             df = pl.DataFrame(self.problem_results)
-            df.write_csv(output_path)
+            df.write_csv(output_file)
         except ImportError:
             # Fallback to manual CSV writing
             import csv
-            with open(output_path, 'w', newline='') as f:
+            with open(output_file, 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=['problem_id', 'answer'])
                 writer.writeheader()
                 writer.writerows(self.problem_results)
                 
-        print(f"✓ Submission saved to {output_path}")
+        print(f"✓ Submission saved to {output_file}")
         
     def print_summary(self) -> None:
         """Print summary statistics."""

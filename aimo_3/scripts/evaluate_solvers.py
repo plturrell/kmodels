@@ -25,7 +25,7 @@ def evaluate_solver(solver, problems: List[Dict], solver_name: str) -> Dict:
     """
     correct = 0
     total = 0
-    total_time = 0
+    total_time: float = 0.0
     errors = 0
 
     results = []

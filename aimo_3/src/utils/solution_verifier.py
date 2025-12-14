@@ -1,7 +1,7 @@
 """Solution verification system for AIMO problems."""
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sympy as sp
 
@@ -20,7 +20,7 @@ class SolutionVerifier:
         problem_statement: str,
         answer: int,
         verification_methods: Optional[List[str]] = None,
-    ) -> Tuple[bool, float, Dict[str, any]]:
+    ) -> Tuple[bool, float, Dict[str, Any]]:
         """
         Verify a solution using multiple methods.
 
@@ -35,7 +35,7 @@ class SolutionVerifier:
         if verification_methods is None:
             verification_methods = ["range_check", "sanity_check", "symbolic_verification"]
 
-        results = {}
+        results: Dict[str, Any] = {}
         validations = []
 
         for method in verification_methods:
@@ -160,7 +160,7 @@ class SolutionVerifier:
         problem_statement: str,
         answer: int,
         reasoning: str,
-    ) -> Tuple[bool, float, Dict[str, any]]:
+    ) -> Tuple[bool, float, Dict[str, Any]]:
         """
         Verify solution including reasoning check.
 

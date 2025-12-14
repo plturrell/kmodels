@@ -33,7 +33,7 @@ class Point:
 
     def coordinates(self) -> Optional[Tuple[float, float]]:
         """Get coordinates if available."""
-        if self.has_coordinates():
+        if self.x is not None and self.y is not None:
             return (self.x, self.y)
         return None
 

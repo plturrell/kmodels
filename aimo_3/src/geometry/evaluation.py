@@ -22,6 +22,8 @@ class EvaluationEngine:
         """Initialize evaluation engine."""
         self.symbols: Dict[str, sp.Symbol] = {}
         self.equations: List[sp.Eq] = []
+        self.use_cache: bool = True
+        self.solve_cache: Dict[str, int] = {}
 
     def evaluate(self, state: State, problem_goal: str) -> int:
         """
@@ -226,11 +228,6 @@ class EvaluationEngine:
     def _solve_constraints(
         self, constraints: List[sp.Eq], goal_quantity: Optional[sp.Symbol]
     ) -> int:
-        # Check cache
-        if self.use_cache:
-            cache_key = str((tuple(str(eq) for eq in constraints), str(goal_quantity)))
-            if cache_key in self.solve_cache:
-                return self.solve_cache[cache_key]
         """
         Solve constraint system to find goal quantity.
 
@@ -241,6 +238,12 @@ class EvaluationEngine:
         Returns:
             Integer answer
         """
+        # Check cache
+        if self.use_cache:
+            cache_key = str((tuple(str(eq) for eq in constraints), str(goal_quantity)))
+            cached = self.solve_cache.get(cache_key)
+            if cached is not None:
+                return cached
         if not constraints:
             return 0
 

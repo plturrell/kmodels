@@ -1,6 +1,6 @@
 """Geometric relations between primitives."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -52,19 +52,7 @@ class Relation:
     relation_type: RelationType
     source: Any  # Point, Line, or Circle
     target: Any  # Point, Line, or Circle
-    parameters: Dict[str, Any] = None  # Additional parameters (angle, ratio, etc.)
-
-    def __init__(
-        self,
-        relation_type: RelationType,
-        source: Any,
-        target: Any,
-        parameters: Optional[Dict[str, Any]] = None,
-    ):
-        self.relation_type = relation_type
-        self.source = source
-        self.target = target
-        self.parameters = parameters or {}
+    parameters: Dict[str, Any] = field(default_factory=dict)  # Additional parameters (angle, ratio, etc.)
 
     def __str__(self) -> str:
         params_str = f"({self.parameters})" if self.parameters else ""

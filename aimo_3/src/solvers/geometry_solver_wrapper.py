@@ -1,9 +1,13 @@
 """Wrapper for geometry solver to integrate with multi-domain architecture."""
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ..geometry.solver import GeometrySolver
 from .base import BaseSolver
+
+if TYPE_CHECKING:
+    from ..geometry.metadata_schema import ProofToken as GeometryProofToken
+    from ..orchestration.stability_tracker import ProofToken as OrchestrationProofToken
 
 
 class GeometrySolverWrapper(BaseSolver):
@@ -24,6 +28,8 @@ class GeometrySolverWrapper(BaseSolver):
             measure_stability: Whether to compute Lyapunov stability metrics
         """
         super().__init__("geometry")
+        self.measure_stability = measure_stability
+        self.last_proof_token: Optional["OrchestrationProofToken"] = None
         if geometry_solver:
             self.geometry_solver = geometry_solver
         else:
@@ -40,38 +46,10 @@ class GeometrySolverWrapper(BaseSolver):
             Integer answer
         """
         answer = self.geometry_solver.solve(problem_statement)
-        
-        # Capture proof token if stability measurement enabled
         if self.measure_stability:
-            self.last_proof_token = self._create_proof_token()
-        
+            geo_token = self.geometry_solver.get_last_proof_token()
+            self.last_proof_token = self._convert_proof_token(geo_token) if geo_token is not None else None
         return answer
-    
-    def get_last_proof_token(self):
-        """
-        Get the last proof token with stability information.
-        
-        Returns:
-            ProofToken or None
-        """
-        return self.last_proof_token
-    
-    def _create_proof_token(self):
-        """Create proof token from last solver execution."""
-        from ..orchestration.stability_tracker import ProofToken, StabilityStatus
-        
-        # Simplified: create token with basic stability info
-        # In full implementation, would extract from solver's proof trace
-        stability = StabilityStatus(
-            status="stable",  # Would compute from proof trace
-            confidence=0.8,  # Would compute from proof quality
-        )
-        
-        return ProofToken(
-            token_id="proof_1",
-            theorem_name="unknown",
-            stability=stability,
-        )
 
     def can_solve(self, problem_statement: str) -> bool:
         """Check if problem is geometric."""
@@ -83,8 +61,31 @@ class GeometrySolverWrapper(BaseSolver):
         ]
         return any(keyword in problem_lower for keyword in geometry_keywords)
     
-    def get_last_proof_token(self):
+    def get_last_proof_token(self) -> Optional["OrchestrationProofToken"]:
         """Get the proof token from the last solve() call."""
-        return self.geometry_solver.get_last_proof_token()
+        return self.last_proof_token
+
+    def _convert_proof_token(self, token: "GeometryProofToken") -> "OrchestrationProofToken":
+        """Convert geometry ProofToken to orchestration ProofToken."""
+        from ..orchestration.stability_tracker import ProofToken, StabilityStatus
+
+        theorem_name = "unknown"
+        if token.proof_sequence:
+            theorem_name = str(token.proof_sequence[-1][0])
+
+        stability = None
+        if token.stability is not None:
+            stability = StabilityStatus(
+                status=str(token.stability.status),
+                lyapunov_exponent=float(token.stability.lambda_max),
+                confidence=float(token.stability.confidence),
+            )
+
+        return ProofToken(
+            token_id=token.token_id,
+            theorem_name=theorem_name,
+            stability=stability,
+            metadata={"problem_id": token.problem_id},
+        )
 
 

@@ -118,6 +118,7 @@ print(answer)
 
     def _execute_with_sandbox(self, code: str) -> int:
         """Execute code using sandbox."""
+        assert self.executor is not None
         # Add necessary imports to code
         full_code = "import math\n"
         full_code += "from fractions import Fraction\n"

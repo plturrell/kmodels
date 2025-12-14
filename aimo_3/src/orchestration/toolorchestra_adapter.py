@@ -13,12 +13,7 @@ if vendor_path.exists():
 
 from ..orchestration.aimo_tools import get_aimo_tools
 
-try:
-    from .stability_tracker import StabilityTracker
-    STABILITY_AVAILABLE = True
-except ImportError:
-    STABILITY_AVAILABLE = False
-    StabilityTracker = None
+from .stability_tracker import StabilityTracker
 
 
 class ToolOrchestraAdapter:
@@ -48,19 +43,17 @@ class ToolOrchestraAdapter:
         self.orchestrator_model = orchestrator_model
         self.measure_stability = measure_stability
         self.tools = get_aimo_tools(measure_stability=measure_stability)
+        self.orchestrator_available = False
+        # Always have a fallback solver available for robustness.
+        from ..solvers.unified_solver import UnifiedSolver
+        self.fallback_solver = UnifiedSolver()
         
         # Initialize stability tracker
-        if track_orchestration_stability and STABILITY_AVAILABLE:
-            self.stability_tracker = StabilityTracker()
-        else:
-            self.stability_tracker = None
+        self.stability_tracker: Optional[StabilityTracker]
+        self.stability_tracker = StabilityTracker() if track_orchestration_stability else None
 
         if use_toolorchestra and self._check_toolorchestra_available():
             self._setup_orchestrator()
-        else:
-            # Fallback to direct solver routing
-            from ..solvers.unified_solver import UnifiedSolver
-            self.fallback_solver = UnifiedSolver()
 
     def _check_toolorchestra_available(self) -> bool:
         """Check if ToolOrchestra is available."""

@@ -1,24 +1,25 @@
 """Problem difficulty classification system."""
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 
 try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.preprocessing import LabelEncoder
+    from sklearn.feature_extraction.text import TfidfVectorizer as _TfidfVectorizer
+    from sklearn.ensemble import RandomForestClassifier as _RandomForestClassifier
+    from sklearn.preprocessing import LabelEncoder as _LabelEncoder
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    # Dummy classes for when sklearn is not available
-    class TfidfVectorizer:
-        pass
-    class RandomForestClassifier:
-        pass
-    class LabelEncoder:
-        pass
+
+    _TfidfVectorizer = None
+    _RandomForestClassifier = None
+    _LabelEncoder = None
+
+TfidfVectorizer: Any = _TfidfVectorizer
+RandomForestClassifier: Any = _RandomForestClassifier
+LabelEncoder: Any = _LabelEncoder
 
 
 class DifficultyClassifier:
@@ -48,18 +49,18 @@ class DifficultyClassifier:
         Returns:
             Dictionary of feature names to values
         """
-        features = {}
+        features: Dict[str, float] = {}
 
         # Length features
-        features["statement_length"] = len(problem_statement)
-        features["word_count"] = len(problem_statement.split())
+        features["statement_length"] = float(len(problem_statement))
+        features["word_count"] = float(len(problem_statement.split()))
 
         # LaTeX complexity
-        features["math_expressions"] = len(re.findall(r'\$[^$]+\$|\\\[.*?\\\]', problem_statement))
-        features["fractions"] = len(re.findall(r'\\frac\{[^}]+\}\{[^}]+\}', problem_statement))
-        features["summations"] = len(re.findall(r'\\sum', problem_statement))
-        features["integrals"] = len(re.findall(r'\\int', problem_statement))
-        features["limits"] = len(re.findall(r'\\lim', problem_statement))
+        features["math_expressions"] = float(len(re.findall(r'\$[^$]+\$|\\\[.*?\\\]', problem_statement)))
+        features["fractions"] = float(len(re.findall(r'\\frac\{[^}]+\}\{[^}]+\}', problem_statement)))
+        features["summations"] = float(len(re.findall(r'\\sum', problem_statement)))
+        features["integrals"] = float(len(re.findall(r'\\int', problem_statement)))
+        features["limits"] = float(len(re.findall(r'\\lim', problem_statement)))
 
         # Mathematical concepts
         features["has_modular_arithmetic"] = 1.0 if re.search(r'mod|remainder|divisible', problem_statement.lower()) else 0.0
@@ -69,8 +70,8 @@ class DifficultyClassifier:
         features["has_number_theory"] = 1.0 if re.search(r'prime|gcd|lcm|divisor', problem_statement.lower()) else 0.0
 
         # Complexity indicators
-        features["nested_expressions"] = problem_statement.count('{')  # Rough estimate
-        features["special_functions"] = len(re.findall(r'\\log|\\sin|\\cos|\\tan|\\exp', problem_statement))
+        features["nested_expressions"] = float(problem_statement.count('{'))  # Rough estimate
+        features["special_functions"] = float(len(re.findall(r'\\log|\\sin|\\cos|\\tan|\\exp', problem_statement)))
 
         # Normalize by length
         if features["statement_length"] > 0:

@@ -1,7 +1,7 @@
 """Stability tracking for orchestration and proof tokens."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional, TypedDict
 from collections import defaultdict
 import json
 from pathlib import Path
@@ -50,6 +50,22 @@ class OrchestrationStabilityMetrics:
             "routing_consistency": self.routing_consistency,
             "metadata": self.metadata,
         }
+
+
+class ToolComparisonStats(TypedDict):
+    executions: int
+    successes: int
+    stability_scores: list[float]
+    average_confidence: float
+
+
+def _new_tool_comparison_stats() -> ToolComparisonStats:
+    return {
+        "executions": 0,
+        "successes": 0,
+        "stability_scores": [],
+        "average_confidence": 0.0,
+    }
 
 
 class StabilityTracker:
@@ -162,31 +178,26 @@ class StabilityTracker:
             },
         )
 
-    def get_tool_comparison(self) -> Dict[str, Dict[str, Any]]:
+    def get_tool_comparison(self) -> Dict[str, ToolComparisonStats]:
         """
         Get per-tool stability comparison.
 
         Returns:
             Dictionary mapping tool names to statistics
         """
-        tool_stats = defaultdict(lambda: {
-            "executions": 0,
-            "successes": 0,
-            "stability_scores": [],
-            "average_confidence": 0.0,
-        })
+        tool_stats: defaultdict[str, ToolComparisonStats] = defaultdict(_new_tool_comparison_stats)
 
         for execution in self.tool_executions:
-            tool_name = execution["tool_name"]
+            tool_name = str(execution["tool_name"])
             stats = tool_stats[tool_name]
             
             stats["executions"] += 1
-            if execution["success"]:
+            if bool(execution["success"]):
                 stats["successes"] += 1
 
             stability_metrics = execution.get("stability_metrics")
             if stability_metrics:
-                confidence = stability_metrics.get("confidence", 0.0)
+                confidence = float(stability_metrics.get("confidence", 0.0))
                 stats["stability_scores"].append(confidence)
                 stats["average_confidence"] = sum(stats["stability_scores"]) / len(stats["stability_scores"])
 
@@ -204,14 +215,12 @@ class StabilityTracker:
 
         # Group by problem type (simplified - would use problem similarity)
         # For now, compute consistency of tool selection patterns
-        tool_patterns = {}
+        tool_patterns: dict[tuple[str, ...], list[str]] = {}
         for decision in self.routing_decisions:
-            problem_id = decision["problem_id"]
-            selected = tuple(sorted(decision["selected_tools"]))
+            problem_id = str(decision["problem_id"])
+            selected = tuple(sorted([str(t) for t in decision["selected_tools"]]))
             
-            if selected not in tool_patterns:
-                tool_patterns[selected] = []
-            tool_patterns[selected].append(problem_id)
+            tool_patterns.setdefault(selected, []).append(problem_id)
 
         # Consistency = how often same pattern is used
         if not tool_patterns:
@@ -229,15 +238,15 @@ class StabilityTracker:
         Returns:
             Dictionary mapping tool names to stability scores
         """
-        tool_scores = defaultdict(list)
+        tool_scores: defaultdict[str, list[float]] = defaultdict(list)
 
         for execution in self.tool_executions:
-            tool_name = execution["tool_name"]
+            tool_name = str(execution["tool_name"])
             stability_metrics = execution.get("stability_metrics")
             
             if stability_metrics:
-                status = stability_metrics.get("stability_status", "unknown")
-                confidence = stability_metrics.get("confidence", 0.0)
+                status = str(stability_metrics.get("stability_status", "unknown"))
+                confidence = float(stability_metrics.get("confidence", 0.0))
                 
                 # Convert status to numeric score
                 if status == "stable":

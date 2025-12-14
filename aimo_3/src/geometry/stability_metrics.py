@@ -1,6 +1,6 @@
 """Stability metrics computation for geometric proofs."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
 from dataclasses import dataclass
 import math
 
@@ -19,6 +19,20 @@ class ReasoningStabilityMetrics:
     status: str
     lambda_max: float
     confidence: float
+
+    def to_dict(self) -> Dict[str, float | str]:
+        return {
+            "status": self.status,
+            "lambda_max": float(self.lambda_max),
+            "confidence": float(self.confidence),
+        }
+
+
+class ProofStabilityMetrics(TypedDict):
+    status: str
+    lyapunov_exponent: float
+    confidence: float
+    proof_length: int
 
 
 def estimate_search_stability(
@@ -85,7 +99,7 @@ class StabilityMetrics:
         initial_state: State,
         final_state: State,
         theorem_sequence: List[Tuple[Theorem, Dict[str, str]]],
-    ) -> Dict[str, float]:
+    ) -> "ProofStabilityMetrics":
         """
         Compute stability metrics for a proof sequence.
 
@@ -102,6 +116,7 @@ class StabilityMetrics:
                 "status": "stable",
                 "lyapunov_exponent": 0.0,
                 "confidence": 1.0,
+                "proof_length": 0,
             }
 
         # Compute Lyapunov exponent (simplified)

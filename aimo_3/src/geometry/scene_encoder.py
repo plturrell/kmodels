@@ -15,12 +15,16 @@ from .scene_graph import GeometricSceneGraph
 from .state import State
 from .scene_sequence import SceneTrace
 
+from .state import State
+from .scene_sequence import SceneTrace
+from ..modeling.graph_attention_encoder import GraphAttentionEncoder
 
-class SceneEncoder(nn.Module):
+
+class GNNSceneEncoder(nn.Module):
     """
-    Encodes geometric scene graphs to fixed-dimensional latent vectors.
+    Standard GNN scene encoder (legacy).
     
-    Uses Graph Neural Network to process scene graph structure.
+    Encodes geometric scene graphs to fixed-dimensional latent vectors.
     """
     
     def __init__(
@@ -230,16 +234,59 @@ class SceneEncoder(nn.Module):
             trace: SceneTrace to encode
             
         Returns:
-            Tensor of shape [T+1, D] where T+1 is trace length
+            Tensor sequences
         """
-        device = next(self.parameters()).device
-        latents = []
-        for scene in trace.scenes:
-            latent = self.forward(scene)
-            latents.append(latent)
-        
+        latents = [self.encode_state(scene) for scene in trace.scenes]
         if not latents:
-            return torch.zeros(1, self.output_dim, device=device)
-        
-        return torch.stack(latents)  # Shape: [T+1, D]
+            return torch.zeros(1, self.output_dim).to(next(self.parameters()).device)
+        return torch.stack(latents)
 
+
+# Alias for backward compatibility
+SceneEncoder = GNNSceneEncoder
+
+
+def create_scene_encoder(
+    encoder_type: str = 'gat',
+    node_dim: int = 64,
+    hidden_dim: int = 256,
+    output_dim: int = 256,
+    num_layers: int = 4,
+    num_heads: int = 4,
+    dropout: float = 0.1,
+    **kwargs,
+) -> Union[GNNSceneEncoder, GraphAttentionEncoder]:
+    """
+    Factory function to create scene encoder.
+    
+    Args:
+        encoder_type: 'gnn' or 'gat'
+        node_dim: Input node feature dimension
+        hidden_dim: Hidden dimension
+        output_dim: Output latent dimension
+        num_layers: Number of layers
+        num_heads: Number of attention heads (GAT only)
+        dropout: Dropout rate
+        **kwargs: Additional arguments
+        
+    Returns:
+        Scene encoder instance
+    """
+    if encoder_type.lower() == 'gat':
+        return GraphAttentionEncoder(
+            node_feature_dim=node_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            dropout=dropout,
+            **kwargs
+        )
+    else:
+        # Legacy GNN
+        return GNNSceneEncoder(
+            node_dim=node_dim if encoder_type == 'gnn' else 9,  # Legacy default
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=num_layers,
+        )

@@ -196,8 +196,8 @@ class GeometryStateEncoder(nn.Module):
     def _build_edge_tensors(self, scene: GeometryScene) -> Tuple[torch.Tensor, torch.Tensor]:
         if not scene.edges:
             edge_index = torch.zeros((2, 0), dtype=torch.long)
-            rel_ids = torch.zeros((0,), dtype=torch.long)
-            return edge_index, rel_ids
+            rel_ids_t = torch.zeros((0,), dtype=torch.long)
+            return edge_index, rel_ids_t
 
         src_ids: List[int] = []
         dst_ids: List[int] = []

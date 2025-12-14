@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # In Kaggle environment, the evaluation API is available
 try:
@@ -53,7 +53,7 @@ class AIMOEvaluator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.problems: List[Dict[str, any]] = []
+        self.problems: List[Dict[str, Any]] = []
         self.answers: Dict[str, int] = {}
         self.is_kaggle = KAGGLE_ENV
 

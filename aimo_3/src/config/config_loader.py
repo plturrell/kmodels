@@ -1,12 +1,25 @@
 """Configuration loading and management with OmegaConf."""
 
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from omegaconf import OmegaConf
 
 
 CONFIG_DIR = Path(__file__).parent.parent.parent / "configs"
+
+
+def _ensure_dict(container: Any) -> Dict[str, Any]:
+    """
+    OmegaConf.to_container() can return non-dict types depending on input.
+    We enforce a concrete dict[str, Any] here for strict typing.
+    """
+    if container is None:
+        return {}
+    if isinstance(container, dict):
+        return cast(Dict[str, Any], container)
+    raise TypeError(f"Expected a dict-like config container, got {type(container).__name__}")
 
 
 class Config:
@@ -35,12 +48,12 @@ class Config:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
-        return OmegaConf.to_container(self._config, resolve=True)
+        return _ensure_dict(OmegaConf.to_container(self._config, resolve=True))
 
     def merge(self, other: "Config") -> "Config":
         """Merge another config into this one."""
         merged = OmegaConf.merge(self._config, other._config)
-        return Config(OmegaConf.to_container(merged, resolve=True))
+        return Config(_ensure_dict(OmegaConf.to_container(merged, resolve=True)))
 
 
 def load_config(config_name: str, config_dir: Optional[Path] = None) -> Config:
@@ -57,13 +70,17 @@ def load_config(config_name: str, config_dir: Optional[Path] = None) -> Config:
     if config_dir is None:
         config_dir = CONFIG_DIR
 
+    # Prevent path traversal / unexpected config paths.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", config_name):
+        raise ValueError(f"Invalid config name: {config_name!r}")
+
     config_path = config_dir / f"{config_name}.yaml"
 
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    config_dict = OmegaConf.load(config_path)
-    return Config(OmegaConf.to_container(config_dict, resolve=True))
+    config_obj = OmegaConf.load(config_path)
+    return Config(_ensure_dict(OmegaConf.to_container(config_obj, resolve=True)))
 
 
 def save_config(config: Config, config_path: Path) -> None:

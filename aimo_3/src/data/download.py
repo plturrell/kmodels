@@ -8,6 +8,23 @@ from typing import Optional
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
+def _safe_project_path(path: Path) -> Path:
+    """
+    Resolve a user-provided path and ensure it stays within the project root.
+    """
+    candidate = path.expanduser()
+    if not candidate.is_absolute():
+        candidate = (_PROJECT_ROOT / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    if not candidate.is_relative_to(_PROJECT_ROOT):
+        raise ValueError(f"Refusing to write outside project root: {candidate}")
+    return candidate
+
+
 def download_data(
     competition: str = "aimo3",
     download_dir: Optional[Path] = None,
@@ -27,10 +44,9 @@ def download_data(
         Path to downloaded data directory
     """
     if download_dir is None:
-        project_root = Path(__file__).parent.parent.parent
-        download_dir = project_root / "data" / "raw"
+        download_dir = _PROJECT_ROOT / "data" / "raw"
 
-    download_dir = Path(download_dir)
+    download_dir = _safe_project_path(Path(download_dir))
     download_dir.mkdir(parents=True, exist_ok=True)
 
     api = KaggleApi()

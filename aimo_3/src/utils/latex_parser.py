@@ -1,10 +1,10 @@
 """LaTeX parsing and normalization utilities."""
 
 import re
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
-def parse_latex(text: str) -> Dict[str, any]:
+def parse_latex(text: str) -> Dict[str, Any]:
     """
     Parse LaTeX text into components.
 

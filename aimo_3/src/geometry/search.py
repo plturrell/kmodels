@@ -1,7 +1,8 @@
 """Deductive search: Search(S_initial, T) using MCTS."""
 
 import random
-from typing import Dict, List, Optional, Tuple
+import math
+from typing import Any, Dict, List, Optional, Tuple
 
 from .state import State
 from .theorems import Theorem, TheoremLibrary
@@ -9,8 +10,6 @@ from .stability_metrics import (
     ReasoningStabilityMetrics,
     estimate_search_stability
 )
-from typing import Optional, Any
-from typing import Optional, Any
 
 
 class MCTSNode:
@@ -35,6 +34,7 @@ class MCTSNode:
         self.visits = 0
         self.value = 0.0
         self.untried_theorems: List[Tuple[Theorem, Dict[str, str]]] = []
+        self.gjepa_score: float = 0.0
 
     def is_fully_expanded(self) -> bool:
         """Check if all possible theorem applications have been tried."""
@@ -50,7 +50,7 @@ class MCTSNode:
         self,
         exploration_constant: float = 1.414,
         gjepa_heuristic: Optional[float] = None,
-    ) -> "MCTSNode":
+    ) -> Optional["MCTSNode"]:
         """
         Select child using UCB1 formula, optionally enhanced with G-JEPA heuristic.
 
@@ -65,7 +65,7 @@ class MCTSNode:
             return None
 
         best_value = float("-inf")
-        best_child = None
+        best_child: Optional["MCTSNode"] = None
 
         for child in self.children:
             if child.visits == 0:
@@ -162,8 +162,8 @@ class DeductiveSearch:
         self.exploration_constant = exploration_constant
         self.gjepa_model = gjepa_model
         self.use_gjepa_heuristic = use_gjepa_heuristic and gjepa_model is not None
-        self._last_search_trajectory = []  # Track states for stability analysis
-        self._proof_sequence_states = []  # Track states in the actual proof sequence
+        self._last_search_trajectory: List[State] = []  # Track states for stability analysis
+        self._proof_sequence_states: List[State] = []  # Track states in the actual proof sequence
 
     def search(
         self, initial_state: State, goal_proposition: Optional[str] = None
@@ -181,10 +181,6 @@ class DeductiveSearch:
         root = MCTSNode(initial_state)
         self._last_search_trajectory = [initial_state]  # Reset trajectory tracking
         self._proof_sequence_states = [initial_state]  # Track states in proof sequence
-        
-        # Initialize proof sequence states tracking
-        if not hasattr(self, '_proof_sequence_states'):
-            self._proof_sequence_states = [initial_state]
 
         for _ in range(self.max_iterations):
             # Selection
@@ -222,16 +218,16 @@ class DeductiveSearch:
 
             # Check if goal found
             if root.is_terminal(goal_proposition):
-                sequence = self._extract_sequence(root)
+                goal_sequence = self._extract_sequence(root)
                 # Extract states from proof sequence
                 self._extract_proof_states(root, initial_state)
-                return sequence
+                return goal_sequence
 
         # Return best sequence found
-        sequence = self._extract_best_sequence(root, goal_proposition)
-        if sequence:
+        best_sequence = self._extract_best_sequence(root, goal_proposition)
+        if best_sequence:
             self._extract_proof_states(root, initial_state)
-        return sequence
+        return best_sequence
 
     def _select(self, root: MCTSNode, goal_proposition: Optional[str] = None) -> MCTSNode:
         """Select node using UCB1, optionally enhanced with G-JEPA."""
@@ -252,9 +248,39 @@ class DeductiveSearch:
                 except Exception:
                     gjepa_score = None
             
-            node = node.select_child(self.exploration_constant, gjepa_heuristic=gjepa_score)
+            selected = node.select_child(self.exploration_constant, gjepa_heuristic=gjepa_score)
+            if selected is None:
+                break
+            node = selected
 
         return node
+
+    def _world_model_leaf_value(self, state: State) -> Optional[float]:
+        """Estimate leaf value using the JEPA/world model, if available.
+
+        Uses gjepa_model.compute_heuristic_score on the leaf state and
+        maps the resulting score (negative loss) through a sigmoid to
+        obtain a soft value in [0, 1]. Returns None if no model is
+        available or if evaluation fails.
+        """
+        if self.gjepa_model is None:
+            return None
+
+        try:
+            # Heuristic score: higher is better
+            score = self.gjepa_model.compute_heuristic_score(
+                current_state=state,
+                candidate_state=state,
+                goal_state=None,
+            )
+        except Exception:
+            return None
+
+        # Map score to [0, 1] with a sigmoid; clamp to avoid overflow
+        # Large positive scores → value ≈ 1, large negative → value ≈ 0.
+        x = max(min(score, 20.0), -20.0)
+        value = 1.0 / (1.0 + math.exp(-x))
+        return float(value)
 
     def _simulate(self, node: MCTSNode, goal_proposition: Optional[str]) -> float:
         """
@@ -272,6 +298,7 @@ class DeductiveSearch:
 
         while depth < self.max_depth:
             if goal_proposition and state.has_proposition(goal_proposition):
+                # Exact goal reached during rollout.
                 return 1.0
 
             # Get applicable theorems
@@ -284,30 +311,44 @@ class DeductiveSearch:
             state = state.apply_theorem(theorem, match)
             depth += 1
 
-        # Heuristic value based on progress
+        # Base heuristic value based on symbolic progress
+        base_value = 0.0
         if goal_proposition:
-            # Check if closer to goal (simplified)
-            return 0.5 if state.has_proposition(goal_proposition) else 0.0
+            # If leaf already satisfies goal (but we hit depth/termination),
+            # treat as partial success.
+            if state.has_proposition(goal_proposition):
+                base_value = 0.5
 
-        return 0.0
+        # World-model-based leaf value (if available)
+        wm_value = self._world_model_leaf_value(state)
+        if wm_value is not None:
+            if goal_proposition:
+                # Blend symbolic and world-model signals.
+                return 0.7 * base_value + 0.3 * wm_value
+            else:
+                # Pure world-model value when no explicit goal.
+                return wm_value
+
+        return base_value
 
     def _backpropagate(self, node: MCTSNode, value: float) -> None:
         """Backpropagate value up the tree."""
-        while node:
-            node.update(value)
-            node = node.parent
+        current: Optional[MCTSNode] = node
+        while current is not None:
+            current.update(value)
+            current = current.parent
             # Decay value as we go up
             value *= 0.9
 
     def _extract_sequence(self, root: MCTSNode) -> List[Tuple[Theorem, Dict[str, str]]]:
         """Extract theorem sequence from root to goal."""
-        sequence = []
+        sequence: List[Tuple[Theorem, Dict[str, str]]] = []
         node = root
 
         while node.children:
             # Find child that leads to goal (simplified - would need proper tracking)
             best_child = max(node.children, key=lambda c: c.value / max(c.visits, 1))
-            if best_child.theorem:
+            if best_child.theorem is not None and best_child.match is not None:
                 sequence.append((best_child.theorem, best_child.match))
             node = best_child
 
@@ -320,7 +361,11 @@ class DeductiveSearch:
         # Find best path to goal
         best_path = self._find_best_path_to_goal(root, goal_proposition)
         if best_path:
-            return [(node.theorem, node.match) for node in best_path[1:] if node.theorem]
+            seq: List[Tuple[Theorem, Dict[str, str]]] = []
+            for node in best_path[1:]:
+                if node.theorem is not None and node.match is not None:
+                    seq.append((node.theorem, node.match))
+            return seq
         return self._extract_sequence(root)
     
     def _find_best_path_to_goal(
@@ -400,21 +445,19 @@ class DeductiveSearch:
         # Create search function wrapper
         def search_fn(state: State, params: dict) -> Tuple[State, List[State]]:
             # Temporarily modify search parameters
-            old_params = {
-                'max_iterations': self.max_iterations,
-                'exploration_constant': self.exploration_constant
-            }
+            old_max_iterations = self.max_iterations
+            old_exploration_constant = self.exploration_constant
             
-            self.max_iterations = int(params.get('max_iterations', old_params['max_iterations']))
-            self.exploration_constant = params.get('exploration_constant', old_params['exploration_constant'])
+            self.max_iterations = int(params.get('max_iterations', old_max_iterations))
+            self.exploration_constant = float(params.get('exploration_constant', old_exploration_constant))
             
             # Run search
             self.search(state, goal_proposition)
             trajectory = list(self._last_search_trajectory)
             
             # Restore parameters
-            self.max_iterations = old_params['max_iterations']
-            self.exploration_constant = old_params['exploration_constant']
+            self.max_iterations = old_max_iterations
+            self.exploration_constant = old_exploration_constant
             
             final_state = trajectory[-1] if trajectory else state
             return final_state, trajectory

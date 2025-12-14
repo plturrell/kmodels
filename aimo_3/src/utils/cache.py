@@ -47,7 +47,7 @@ class ProblemCache:
         """
         # Normalize problem statement
         normalized = problem_statement.strip().lower()
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def get(self, problem_statement: str) -> Optional[int]:
         """

@@ -1,10 +1,10 @@
 """Base LLM solver for AIMO problems."""
 
 import os
-from typing import Optional
+from typing import Any, Optional, cast
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
 
 class LLMSolver:
@@ -39,16 +39,18 @@ class LLMSolver:
         self.max_tokens = max_tokens
         self.device = device
 
-        self.model = None
-        self.tokenizer = None
+        self.model: Optional[PreTrainedModel] = None
+        self.tokenizer: Optional[PreTrainedTokenizerBase] = None
 
         if not use_api and model_name:
             self._load_model()
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Load HuggingFace model and tokenizer."""
         if self.model is not None:
             return
+        if self.model_name is None:
+            raise ValueError("model_name must be set to load a local model")
 
         print(f"Loading model: {self.model_name}")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -66,41 +68,56 @@ class LLMSolver:
         if self.api_provider == "openai":
             import openai
 
-            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            response = client.chat.completions.create(
+            openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            openai_response = openai_client.chat.completions.create(
                 model=self.model_name or "gpt-4",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
-            return response.choices[0].message.content
+            content = openai_response.choices[0].message.content
+            if content is None:
+                raise RuntimeError("OpenAI response had empty message content")
+            return content
         elif self.api_provider == "anthropic":
             import anthropic
 
-            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-            response = client.messages.create(
+            anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            anthropic_response = anthropic_client.messages.create(
                 model=self.model_name or "claude-3-opus-20240229",
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text
+            first_block = anthropic_response.content[0]
+            return cast(Any, first_block).text
         else:
             raise ValueError(f"Unknown API provider: {self.api_provider}")
 
     def _call_local_model(self, prompt: str) -> str:
         """Call local HuggingFace model."""
+        if self.tokenizer is None or self.model is None:
+            self._load_model()
+        assert self.tokenizer is not None and self.model is not None
+
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
+        pad_token_id = self.tokenizer.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self.tokenizer.eos_token_id
+        if pad_token_id is None:
+            raise RuntimeError("Tokenizer has neither pad_token_id nor eos_token_id set")
+
         with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.max_tokens,
-                temperature=self.temperature if self.temperature > 0 else None,
-                do_sample=self.temperature > 0,
-                pad_token_id=self.tokenizer.pad_token_id,
-            )
+            generate_kwargs = {
+                "max_new_tokens": self.max_tokens,
+                "do_sample": self.temperature > 0,
+                "pad_token_id": pad_token_id,
+            }
+            if self.temperature > 0:
+                generate_kwargs["temperature"] = self.temperature
+            outputs = cast(Any, self.model).generate(**inputs, **generate_kwargs)
 
         generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         # Extract only the newly generated part

@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple, Any, Set, Dict
 
 from .evaluation import EvaluationEngine
 from .parser import GeometryParser, parse_problem
@@ -97,6 +97,7 @@ class GeometrySolver:
                             gjepa_model.load_state_dict(checkpoint['model_state_dict'])
                         if 'encoder_state_dict' in checkpoint:
                             encoder.load_state_dict(checkpoint['encoder_state_dict'])
+                        gjepa_model.encoder = encoder
                         gjepa_model.eval()
                         encoder.eval()
                         print("✓ G-JEPA model loaded for heuristic guidance")
@@ -196,7 +197,7 @@ class GeometrySolver:
 
     def _simple_search(
         self, initial_state: State, goal_proposition: Optional[str]
-    ) -> Optional[list]:
+    ) -> Optional[List[Tuple[Theorem, Dict[str, str]]]]:
         """
         Simple depth-first search (fallback when MCTS disabled).
 
@@ -207,8 +208,8 @@ class GeometrySolver:
         Returns:
             Theorem sequence or None
         """
-        visited = set()
-        stack = [(initial_state, [])]
+        visited: set[int] = set()
+        stack: List[Tuple[State, List[Tuple[Theorem, Dict[str, str]]]]] = [(initial_state, [])]
 
         while stack and len(stack[0][1]) < self.max_depth:
             state, sequence = stack.pop()

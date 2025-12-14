@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import time
+from pathlib import Path
 from typing import List
 
 from .schema import (
@@ -432,7 +433,6 @@ def main() -> None:
     parser.add_argument(
         "--num", type=int, default=10, help="Number of problems to generate"
     )
-    parser.add_argument("--out", type=str, required=True, help="Output JSONL path")
     parser.add_argument(
         "--kind",
         choices=["area", "hypotenuse", "area_chained"],
@@ -442,7 +442,11 @@ def main() -> None:
     args = parser.parse_args()
 
     problems = generate_examples(args.num, kind=args.kind)
-    with open(args.out, "w", encoding="utf-8") as f:
+    project_root = Path(__file__).parent.parent.parent
+    out_path = (project_root / "outputs" / "geometry_examples.jsonl").resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
         for p in problems:
             f.write(json.dumps(p.model_dump(), ensure_ascii=False) + "\n")
 

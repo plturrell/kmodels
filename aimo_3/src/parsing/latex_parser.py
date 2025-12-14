@@ -1,7 +1,7 @@
 """Advanced LaTeX parser using pylatexenc for proper AST construction."""
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 try:
     from pylatexenc.latexwalker import LatexWalker, LatexCharsNode, LatexMacroNode, LatexGroupNode
@@ -171,7 +171,7 @@ class AdvancedLaTeXParser:
         common_words = {"the", "and", "or", "is", "are", "find", "what", "when", "where"}
         return [v for v in set(matches) if v.lower() not in common_words]
 
-    def parse_problem_structure(self, latex_string: str) -> Dict[str, Any]:
+    def parse_problem_structure(self, latex_string: str) -> "ProblemStructure":
         """
         Parse problem structure: given, find, constraints.
 
@@ -181,7 +181,7 @@ class AdvancedLaTeXParser:
         Returns:
             Dictionary with 'given', 'find', 'constraints'
         """
-        structure = {
+        structure: ProblemStructure = {
             "given": [],
             "find": [],
             "constraints": [],
@@ -218,6 +218,12 @@ class AdvancedLaTeXParser:
             structure["constraints"].extend(matches)
 
         return structure
+
+
+class ProblemStructure(TypedDict):
+    given: List[str]
+    find: List[str]
+    constraints: List[Tuple[str, str]]
 
 
 def parse_latex(latex_string: str) -> LaTeXASTNode:

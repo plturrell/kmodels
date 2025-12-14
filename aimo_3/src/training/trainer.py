@@ -113,6 +113,7 @@ class AIMOTrainer:
         """
         if self.model is None:
             self.load_model()
+        assert self.model is not None and self.tokenizer is not None
 
         # Create datasets
         train_dataset = AIMODataset(
@@ -141,7 +142,7 @@ class AIMOTrainer:
             logging_dir=str(self.output_dir / "logs"),
             logging_steps=10,
             save_steps=100,
-            evaluation_strategy="steps" if val_dataset else "no",
+            eval_strategy="steps" if val_dataset else "no",
             eval_steps=100 if val_dataset else None,
             save_total_limit=3,
             load_best_model_at_end=True if val_dataset else False,
@@ -168,6 +169,7 @@ class AIMOTrainer:
             print(f"Validation metrics: {eval_results}")
 
             # Compute custom AIMO metrics
+            assert val_problems is not None
             val_metrics = self._compute_aimo_metrics(val_problems)
             print(f"AIMO metrics: {val_metrics}")
 

@@ -5,6 +5,23 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
+def _safe_project_path(path: Path) -> Path:
+    """
+    Resolve a user-provided path and ensure it stays within the project root.
+    """
+    candidate = path.expanduser()
+    if not candidate.is_absolute():
+        candidate = (_PROJECT_ROOT / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    if not candidate.is_relative_to(_PROJECT_ROOT):
+        raise ValueError(f"Refusing to access paths outside project root: {candidate}")
+    return candidate
+
+
 def load_problem(problem_path: Union[str, Path]) -> Dict[str, str]:
     """
     Load a single problem from a file.
@@ -15,7 +32,7 @@ def load_problem(problem_path: Union[str, Path]) -> Dict[str, str]:
     Returns:
         Dictionary with 'problem_id' and 'statement' keys
     """
-    problem_path = Path(problem_path)
+    problem_path = _safe_project_path(Path(problem_path))
 
     if problem_path.suffix == ".json":
         with open(problem_path, "r", encoding="utf-8") as f:
@@ -45,7 +62,7 @@ def load_problems(
     Returns:
         List of problem dictionaries
     """
-    data_dir = Path(data_dir)
+    data_dir = _safe_project_path(Path(data_dir))
     problems = []
 
     for problem_file in data_dir.glob(pattern):
