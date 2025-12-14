@@ -11,6 +11,21 @@ from src.solvers.unified_solver import UnifiedSolver
 from src.geometry.solver import GeometrySolver
 
 
+_AIMO3_ROOT = Path(__file__).resolve().parents[1]
+_DATA_DIR = _AIMO3_ROOT / "data"
+_OUTPUTS_DIR = _AIMO3_ROOT / "outputs"
+
+
+def _safe_data_file(path: Path) -> Path:
+    """Constrain inputs to a file name under aimo_3/data/."""
+    return (_DATA_DIR / Path(path).name).resolve()
+
+
+def _safe_output_file(path: Path) -> Path:
+    """Constrain outputs to a file name under aimo_3/outputs/."""
+    return (_OUTPUTS_DIR / Path(path).name).resolve()
+
+
 def evaluate_solver(solver, problems: List[Dict], solver_name: str) -> Dict:
     """
     Evaluate a solver on a set of problems.
@@ -85,18 +100,6 @@ def evaluate_solver(solver, problems: List[Dict], solver_name: str) -> Dict:
 def main():
     parser = argparse.ArgumentParser(description="Evaluate solvers on AIMO problems")
     parser.add_argument(
-        "--problems",
-        type=Path,
-        default=Path("data/generated_problems.json"),
-        help="Path to problems JSON file",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("outputs/evaluation_results.json"),
-        help="Output file for results",
-    )
-    parser.add_argument(
         "--solvers",
         nargs="+",
         default=["orchestrated", "unified", "geometry"],
@@ -113,11 +116,12 @@ def main():
     args = parser.parse_args()
 
     # Load problems
-    if not args.problems.exists():
-        print(f"Error: Problems file not found: {args.problems}")
+    problems_file = _safe_data_file(Path("generated_problems.json"))
+    if not problems_file.exists():
+        print(f"Error: Problems file not found: {problems_file}")
         return
 
-    with open(args.problems) as f:
+    with open(problems_file, encoding="utf-8") as f:
         problems_data = json.load(f)
 
     problems = problems_data if isinstance(problems_data, list) else problems_data.get("problems", [])
@@ -149,11 +153,12 @@ def main():
         print(f"  Avg Time: {results['avg_time']:.3f}s")
 
     # Save results
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    output_file = _safe_output_file(Path("evaluation_results.json"))
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2)
 
-    print(f"\nResults saved to {args.output}")
+    print(f"\nResults saved to {output_file}")
 
     # Print comparison
     print("\n" + "=" * 60)

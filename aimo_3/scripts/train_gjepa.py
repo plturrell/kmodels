@@ -19,6 +19,19 @@ from src.modeling.gjepa_model import GJEPA
 from src.geometry.scene_encoder import SceneEncoder
 
 
+_OUTPUTS_DIR = project_root / "outputs"
+
+
+def _safe_outputs_dir(path: Path) -> Path:
+    """Constrain outputs to a directory name under aimo_3/outputs/."""
+    return (_OUTPUTS_DIR / Path(path).name).resolve()
+
+
+def _safe_checkpoint(path: Path) -> Path:
+    """Constrain checkpoints to a file name under aimo_3/outputs/."""
+    return (_OUTPUTS_DIR / Path(path).name).resolve()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train G-JEPA model")
     parser.add_argument(
@@ -39,20 +52,9 @@ def main():
         default=32,
         help="Batch size",
     )
-    parser.add_argument(
-        "--output_dir",
-        type=Path,
-        default=Path("outputs/gjepa"),
-        help="Output directory for model checkpoints",
-    )
-    parser.add_argument(
-        "--checkpoint",
-        type=Path,
-        default=None,
-        help="Path to checkpoint to resume training",
-    )
-    
     args = parser.parse_args()
+    output_dir = _safe_outputs_dir(Path("gjepa"))
+    checkpoint = None
     
     print("=" * 60)
     print("Training G-JEPA Model")
@@ -60,7 +62,7 @@ def main():
     print(f"Number of problems: {args.num_problems}")
     print(f"Number of epochs: {args.num_epochs}")
     print(f"Batch size: {args.batch_size}")
-    print(f"Output directory: {args.output_dir}")
+    print(f"Output directory: {output_dir}")
     print("=" * 60)
     
     # Train model
@@ -68,12 +70,12 @@ def main():
         num_problems=args.num_problems,
         num_epochs=args.num_epochs,
         batch_size=args.batch_size,
-        output_dir=args.output_dir,
-        checkpoint_path=args.checkpoint,
+        output_dir=output_dir,
+        checkpoint_path=checkpoint,
     )
     
     print("\n✓ Training complete!")
-    print(f"Model and encoder saved to {args.output_dir / 'gjepa_final.pt'}")
+    print(f"Model and encoder saved to {output_dir / 'gjepa_final.pt'}")
 
 
 if __name__ == "__main__":

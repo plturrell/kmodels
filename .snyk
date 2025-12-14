@@ -1,0 +1,6 @@
+version: v1.25.0
+exclude:
+  "aimo_3/vendor/**": {}
+  "aimo_3/ui/**": {}
+  "**/__pycache__/**": {}
+  "**/*.pyc": {}

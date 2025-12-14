@@ -8,14 +8,17 @@ from typing import Dict, List
 from src.geometry.generator import ProblemGenerator
 
 
+_AIMO3_ROOT = Path(__file__).resolve().parents[1]
+_DATA_DIR = _AIMO3_ROOT / "data"
+
+
+def _safe_output_file(path: Path) -> Path:
+    """Constrain outputs to a file name under aimo_3/data/."""
+    return (_DATA_DIR / Path(path).name).resolve()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate geometric training problems")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("data/generated_problems.json"),
-        help="Output file path",
-    )
     parser.add_argument(
         "--num_problems",
         type=int,
@@ -108,11 +111,12 @@ def main():
         })
 
     # Save to file
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    output_file = _safe_output_file(Path("generated_problems.json"))
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2)
 
-    print(f"Generated {len(output_data)} problems and saved to {args.output}")
+    print(f"Generated {len(output_data)} problems and saved to {output_file}")
 
     # Print statistics
     family_counts = {}
