@@ -22,3 +22,6 @@ kaggle.json
 *.jpg
 *.jpeg
 
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.cursor/rules/snyk_rules.mdc

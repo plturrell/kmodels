@@ -1,3 +1,5 @@
 {
-    "git.ignoreLimitWarning": true
+    "git.ignoreLimitWarning": true,
+    "snyk.advanced.organization": "1a6089cb-ffba-4507-a7dd-385821dd3d26",
+    "snyk.advanced.autoSelectOrganization": true
 }

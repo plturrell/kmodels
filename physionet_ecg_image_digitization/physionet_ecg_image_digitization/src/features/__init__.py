@@ -1,6 +1,0 @@
-"""Re-export feature helpers from the workspace package."""
-
-from physionet_ecg_image_digitization.src.features import *  # type: ignore F401,F403
-from physionet_ecg_image_digitization.src.features import __all__ as _ALL  # type: ignore F401
-
-__all__ = list(_ALL)
