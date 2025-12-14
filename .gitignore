@@ -1,6 +1,8 @@
 .venv/
 */.venv/
 .DS_Store
+__pycache__/
+*.pyc
 kaggle.json
 */data/
 */outputs/
@@ -21,6 +23,12 @@ kaggle.json
 *.png
 *.jpg
 *.jpeg
+
+# Ignore local UI + non-submodule vendor drop-ins under aimo_3
+aimo_3/ui/
+aimo_3/vendor/*
+!aimo_3/vendor/TinyRecursiveModels/
+!aimo_3/vendor/ToolOrchestra/
 
 
 # Snyk Security Extension - AI Rules (auto-generated)

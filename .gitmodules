@@ -1,6 +1,8 @@
 [submodule "aimo_3/vendor/TinyRecursiveModels"]
 	path = aimo_3/vendor/TinyRecursiveModels
 	url = https://github.com/SamsungSAILMontreal/TinyRecursiveModels.git
+	ignore = untracked
 [submodule "aimo_3/vendor/ToolOrchestra"]
 	path = aimo_3/vendor/ToolOrchestra
 	url = https://github.com/NVlabs/ToolOrchestra.git
+	ignore = untracked
