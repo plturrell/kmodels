@@ -147,6 +147,8 @@ class ActionConditionedGJEPA(nn.Module):
             self.action_norm = nn.LayerNorm(hidden_dim)
         
         # Dynamics module: either Transformer or LiquidDynamics
+        # Explicit annotation so mypy accepts the conditional assignment.
+        self.dynamics: nn.Module
         if self.use_liquid_dynamics:
             self.dynamics = LiquidDynamics(hidden_dim)
         else:
